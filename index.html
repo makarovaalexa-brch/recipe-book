@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Recipe Book</title>
+  <meta name="description" content="Our family recipes, meal plan and shopping list">
+  <meta name="theme-color" content="#b4532a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Recipes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/week">Recipe Book</a>
+    <span id="sync" class="sync" title="Sync status"></span>
+    <a class="gear" href="#/settings" aria-label="Settings">⚙︎</a>
+  </header>
+  <main id="view" class="view"></main>
+  <nav class="tabs">
+    <a href="#/week" data-tab="week"><span>🗓</span>Week</a>
+    <a href="#/list" data-tab="list"><span>🛒</span>List</a>
+    <a href="#/recipes" data-tab="recipes"><span>📖</span>Recipes</a>
+    <a href="#/history" data-tab="history"><span>⭐</span>History</a>
+  </nav>
+  <div id="modal" class="modal" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="mock.js"></script>
+  <script src="classics.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
