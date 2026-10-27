@@ -24,6 +24,7 @@ const UI = {
   portions: {}, got: {}, step: {},
   draft: store.get('draft', null),
   showTrolley: false, showHome: false,
+  basicsOpen: store.get('basicsOpen', false),
   wake: null,
 };
 
@@ -375,7 +376,7 @@ VIEWS.week = () => {
   return demoBanner() + `
     <div class="row">
       <button class="ghost" data-act="weekMove" data-n="-7" aria-label="Previous week">‹</button>
-      <div class="grow" style="text-align:center"><b>${thisWeek ? 'This week' : 'Week of ' + nice(wk, { weekday: 'short', day: 'numeric', month: 'short' })}</b>
+      <div class="grow weekhead"><b>${thisWeek ? 'This week' : 'Week of ' + nice(wk, { weekday: 'short', day: 'numeric', month: 'short' })}</b>
         <div class="muted small">${nice(wk)} – ${nice(addDays(wk, 6))}</div></div>
       <button class="ghost" data-act="weekMove" data-n="7" aria-label="Next week">›</button>
     </div>
@@ -407,8 +408,17 @@ function groceriesSection(entries) {
   return `<h2>Groceries <span class="muted small">no recipe needed</span></h2>
     <div class="search"><input id="gq" data-in="grocSearch" placeholder="Add anything… e.g. “sugar”, “2 ready desserts”" autocomplete="off" enterkeyhint="done"><div id="gsugg"></div></div>
     <div class="chips wrap">${extra.map(e => `<button class="chip on" data-act="unplan" data-id="${e.id}" title="Remove">${esc((e.qty ? e.qty + ' ' : '') + e.title)} ✕</button>`).join('')}</div>
-    ${basics.length ? `<p class="muted small" style="margin:4px 0 0">Weekly basics – tap any you don't need this week</p>
-    <div class="chips wrap">${basics.map(i => `<button class="chip basic ${skip.has(i.id) ? 'skip' : ''}" data-act="grocSkip" data-id="${i.id}">${skip.has(i.id) ? '' : '✓ '}${esc(i.name)}</button>`).join('')}</div>` : ''}`;
+    ${basics.length ? `<div class="basics">
+      <button class="basics-head" data-act="toggleBasics" aria-expanded="${UI.basicsOpen}">
+        <span class="grow">Weekly basics</span>
+        <span class="muted small">${basics.filter(i => !skip.has(i.id)).length} of ${basics.length} on the list</span>
+        <span class="chev">${UI.basicsOpen ? '−' : '+'}</span>
+      </button>
+      ${UI.basicsOpen ? `<p class="muted small" style="margin:8px 0 4px">Untick anything you don't need this week.</p>
+      <div class="basics-list">${basics.map(i => `<label class="basic-row ${skip.has(i.id) ? 'off' : ''}">
+        <input type="checkbox" data-act="grocSkip" data-id="${i.id}" ${skip.has(i.id) ? '' : 'checked'}>
+        <span class="grow">${esc(i.name)}</span>${i.default_qty ? `<span class="muted small">${esc(i.default_qty)}</span>` : ''}</label>`).join('')}</div>` : ''}
+    </div>` : ''}`;
 }
 
 function mealCard(e) {
@@ -880,6 +890,7 @@ const ACT = {
     const it = D.items.find(i => i.id === el.dataset.id);
     savePlan(UI.week, skipped ? entries.filter(e => e !== skipped) : entries.concat([Object.assign(groceryEntry(it), { kind: 'skip' })]));
   },
+  toggleBasics: () => { UI.basicsOpen = !UI.basicsOpen; store.set('basicsOpen', UI.basicsOpen); render(); },
   grocAdd: el => addGrocery(D.items.find(i => i.id === el.dataset.id), el.dataset.qty),
   runSurprise: async el => {
     el.disabled = true;
