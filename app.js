@@ -332,7 +332,7 @@ function groceryRows(week) {
   const entries = weekEntries(week);
   const skip = new Set(entries.filter(e => e.kind === 'skip').map(e => e.item_id));
   const rows = D.items.filter(i => yes(i.weekly) && !skip.has(i.id))
-    .map(i => ({ item_id: i.id, name: i.name, aisle: i.aisle, qty: i.default_qty || '', unit: '', note: '', source: 'basic', status: '' }));
+    .map(i => ({ item_id: i.id, name: i.name, aisle: i.aisle, qty: i.default_qty || '', unit: '', note: '', source: 'basic', status: yes(i.staple) ? 'check' : '' }));
   entries.filter(e => e.kind === 'item').forEach(e => {
     const it = D.items.find(i => i.id === e.item_id) || {};
     const have = rows.find(r => r.item_id === e.item_id);
@@ -352,7 +352,7 @@ async function buildList() {
     if (onList.has(g.item_id)) return;
     const r = rows.find(x => x.item_id === g.item_id);
     if (!r) rows.push(g);
-    else if (g.qty) Object.assign(r, { qty: [r.qty, g.qty].filter(Boolean).join(' + '), status: '' });
+    else if (g.qty) Object.assign(r, { qty: [r.qty, g.qty].filter(Boolean).join(' + '), status: g.status });
   });
   const list = await run('listBuild', { rows });
   if (!list) return;
@@ -705,7 +705,7 @@ VIEWS.history = () => {
 
 VIEWS.items = () => `<h1>Items</h1>
   <p class="muted small">Everything that can go on the list. Different names for the same thing (aliases) are added up together.
-  <b>Weekly</b> items are added to every new list; <b>staples</b> are asked about (“check you have”) instead of added.</p>
+  <b>Weekly</b> items are added to every new list; <b>staples</b> are asked about (“check you have”) instead of added. Both = asked about every week.</p>
   <div class="row"><div class="search grow"><input data-in="itemSearch" id="iq" placeholder="Search items"></div><button data-act="newItem">＋ New</button></div>
   <div id="iresults">${itemResults('')}</div>`;
 
