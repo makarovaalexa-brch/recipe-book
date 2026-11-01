@@ -71,7 +71,7 @@ p { margin: .4em 0; }
   font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 1.75rem; letter-spacing: .01em; line-height: 1.1;
 }
 .brand::after {
-  content: "family kitchen · est. 2019"; display: block; font: 500 .62rem var(--sans); font-style: normal;
+  content: "family kitchen"; display: block; font: 500 .62rem var(--sans); font-style: normal;
   letter-spacing: .28em; text-transform: uppercase; color: var(--muted); margin-top: 2px;
 }
 .gear { font-size: 1.2rem; color: var(--muted); padding: 4px; }
