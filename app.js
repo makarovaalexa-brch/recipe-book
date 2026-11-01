@@ -567,12 +567,11 @@ VIEWS.r = rt => {
   const f = p / base;
   const got = UI.got[r.id] || {};
   const cur = UI.step[r.id];
-  const history = D.log.filter(l => l.recipe_id === r.id).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   return `
     ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="">` : ''}
     <h1>${esc(r.title)}</h1>
     <div class="row small">${st && st.n ? stars(st.avg) + `<span class="muted">${st.avg.toFixed(1)}</span>` : ''} ${verdict(st)}
-      <span class="muted">${st ? `cooked ${st.count}× · last ${ago(st.last)}` : 'not cooked yet'}</span></div>
+      <span class="muted">${st ? `cooked ${st.count}× · last ${nice(st.last, { day: 'numeric', month: 'short', year: 'numeric' })}` : 'not cooked yet'}</span></div>
     ${byline(r)}
     <div class="row small muted" style="margin-top:4px">${r.time_mins ? '⏱ ' + esc(r.time_mins) + ' min' : ''} ${chillies(r)}</div>
     <div>${String(r.tags || '').split(',').filter(t => t.trim()).map(t => `<span class="tag">${esc(t.trim())}</span>`).join('')}</div>
@@ -591,7 +590,6 @@ VIEWS.r = rt => {
     <ol class="steps">${(r.steps || []).map((s, n) => `<li data-act="step" data-id="${r.id}" data-n="${n}" class="${cur === n ? 'cur' : cur > n ? 'past' : ''}">${esc(s)}</li>`).join('')}</ol>
     ${(r.tips || []).length ? `<div class="tips" style="margin-top:14px"><b>💡 Why it works</b><ul>${r.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
     ${r.notes ? `<h2>Our notes</h2><p style="white-space:pre-wrap">${esc(r.notes)}</p>` : ''}
-    ${history.length ? `<h2>History</h2>${history.map(l => `<div class="li" data-act="editLog" data-id="${l.id}"><span class="grow">${nice(l.date, { day: 'numeric', month: 'short', year: 'numeric' })}${l.note ? `<span class="note">${esc(l.note)}</span>` : ''}</span>${stars(Number(l.rating))}</div>`).join('')}` : ''}
     <hr>
     <div class="row"><a class="btn" href="#/edit/${r.id}">✏️ Edit</a><button class="ghost" data-act="archive" data-id="${r.id}">Archive</button></div>`;
 };
