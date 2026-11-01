@@ -532,10 +532,27 @@ function recipeResults() {
     const s = st[r.id];
     return `<a class="rcard" href="#/r/${r.id}">
       ${r.image ? `<div class="img" style="background-image:url('${esc(r.image)}')"></div>` : `<div class="img">${emoji(r)}</div>`}
-      <div class="body"><div class="t">${esc(r.title)}</div>
+      <div class="body">${source(r).name ? `<div class="src">${esc(source(r).name)}</div>` : ''}<div class="t">${esc(r.title)}</div>
         <div class="small">${s && s.n ? stars(s.avg) : ''} ${verdict(s)}</div>
         <div class="muted small">${s ? `${s.count}× · ${ago(s.last)}` : 'not cooked yet'}</div></div></a>`;
   }).join('') + '</div>';
+}
+
+// Who the recipe is from: an author or a site, shown as a byline. Archived copies keep the original name.
+function source(r) {
+  const raw = String(r.source_name || '').trim();
+  const archived = /\(archived copy\)/i.test(raw) || /web\.archive\.org/.test(r.source_url || '');
+  const name = raw.replace(/\s*\(archived copy\)\s*/i, '');
+  return { name: name === 'Home recipe' ? 'Our kitchen' : name, archived };
+}
+
+function byline(r) {
+  const s = source(r);
+  if (!s.name && !r.source_url) return '';
+  const name = esc(s.name || 'Original recipe');
+  return `<div class="byline">${s.name === 'Our kitchen' ? 'From' : 'Recipe by'}
+    ${r.source_url ? `<a href="${esc(r.source_url)}" target="_blank" rel="noopener">${name} ↗</a>` : `<b>${name}</b>`}
+    ${s.archived ? '<span class="muted">· archived copy</span>' : ''}</div>`;
 }
 
 VIEWS.r = rt => {
@@ -554,8 +571,8 @@ VIEWS.r = rt => {
     <h1>${esc(r.title)}</h1>
     <div class="row small">${st && st.n ? stars(st.avg) + `<span class="muted">${st.avg.toFixed(1)}</span>` : ''} ${verdict(st)}
       <span class="muted">${st ? `cooked ${st.count}× · last ${ago(st.last)}` : 'not cooked yet'}</span></div>
-    <div class="row small muted" style="margin-top:4px">${r.time_mins ? '⏱ ' + esc(r.time_mins) + ' min' : ''} ${chillies(r)}
-      ${r.source_url ? `· <a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(r.source_name || 'original')} ↗</a>` : ''}</div>
+    ${byline(r)}
+    <div class="row small muted" style="margin-top:4px">${r.time_mins ? '⏱ ' + esc(r.time_mins) + ' min' : ''} ${chillies(r)}</div>
     <div>${String(r.tags || '').split(',').filter(t => t.trim()).map(t => `<span class="tag">${esc(t.trim())}</span>`).join('')}</div>
     ${r.description ? `<p class="muted">${esc(r.description)}</p>` : ''}
     <div class="row" style="margin:12px 0">
@@ -645,6 +662,7 @@ VIEWS.edit = rt => {
       <label class="field">Technique tips – one per line<textarea data-in="draftLines" data-f="tips">${esc((d.tips || []).join('\n'))}</textarea></label>
       <label class="field">Our notes<textarea data-in="draft" data-f="notes">${esc(d.notes)}</textarea></label>
       <label class="field">Original link<input data-in="draft" data-f="source_url" value="${esc(d.source_url)}"></label>
+      <label class="field">Source – author or website<input data-in="draft" data-f="source_name" value="${esc(d.source_name)}" placeholder="e.g. Brian Lagerstrom, BBC Good Food"></label>
       <div class="row end"><button class="ghost" data-act="discardDraft">Cancel</button><button class="primary" data-act="saveDraft">Save recipe</button></div>
     </div>`;
 };
