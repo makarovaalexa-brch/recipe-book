@@ -189,7 +189,8 @@ function thumb(r, cls) {
 // --------------------------------------------------- quantities/units ---
 
 const UNITS = { g: ['g', 1], kg: ['g', 1000], ml: ['ml', 1], l: ['ml', 1000], tsp: ['tsp', 1], tbsp: ['tsp', 3] };
-const PLURAL = { clove: 'cloves', tin: 'tins', pack: 'packs', bunch: 'bunches', pinch: 'pinches' };
+const PLURAL = { clove: 'cloves', tin: 'tins', pack: 'packs', bunch: 'bunches', pinch: 'pinches', slice: 'slices' };
+const SLICES_PER_LOAF = 16;
 
 function fmtNum(n) {
   if (!isFinite(n)) return '';
@@ -221,6 +222,7 @@ function fmtShop(v, base) {
   if (UNITS[base] && base !== 'tsp') return fmtQty(v, base);
   if (base === 'tsp') return fmtQty(v, 'tsp');
   const n = Math.ceil(v - 0.01);
+  if (base === 'slice') { const l = Math.ceil(n / SLICES_PER_LOAF); return l + (l > 1 ? ' loaves' : ' loaf') + ' (' + n + ' slices)'; }
   if (base === 'pc' || !base) return String(n);
   return n + ' ' + (n > 1 ? (PLURAL[base] || base) : base);
 }
@@ -627,7 +629,7 @@ VIEWS.edit = rt => {
   const types = ['dinner', 'baking', 'dessert', 'breakfast', 'lunch', 'side', 'other'];
   const spice = [[0, 'none'], [1, '🌶 mild'], [2, '🌶🌶 medium'], [3, '🌶🌶🌶 hot']];
   const proteins = ['chicken', 'beef', 'pork', 'lamb', 'fish', 'seafood', 'veggie', 'vegan', 'mixed', 'none'];
-  const units = ['', 'g', 'ml', 'tsp', 'tbsp', 'pc', 'clove', 'tin', 'pack', 'bunch', 'pinch', 'kg', 'l'];
+  const units = ['', 'g', 'ml', 'tsp', 'tbsp', 'pc', 'clove', 'slice', 'tin', 'pack', 'bunch', 'pinch', 'kg', 'l'];
   const tags = Array.isArray(d.tags) ? d.tags.join(', ') : (d.tags || '');
   return `<h1>${d.id ? 'Edit recipe' : 'Check & save'}</h1>
     ${d.problem ? `<div class="card pantry"><b>Heads up:</b> ${esc(d.problem)}</div>` : ''}
