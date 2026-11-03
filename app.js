@@ -342,7 +342,7 @@ function recipeFacts(r) {
     NUTR.forEach(k => { n[k] += num(it[k], 0) * g / 100; });
     if (it.group === 'sweet') sweetSugar += num(it.sugar, 0) * g / 100; // free sugars, not fruit/veg/milk sugar
     // Glycemic load = GI × digestible carbs / 100 (UK carbs already exclude fibre). Items without a GI barely have carbs.
-    gl += num(it.gi, 0) * num(it.carbs, 0) * g / 100 / 100;
+    gl += num(it.gi, 30) * num(it.carbs, 0) * g / 100 / 100; // no GI = low-carb veg/dairy, assume a low 30
     if (num(it.price, 0) && num(it.price_g, 0)) { cost += it.price / it.price_g * g; priced++; }
   });
   NUTR.forEach(k => { n[k] /= per; });
