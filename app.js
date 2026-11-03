@@ -531,6 +531,7 @@ VIEWS.week = () => {
       <button class="ghost" data-act="weekMove" data-n="7" aria-label="Next week">›</button>
     </div>
     <h2>Dinners <span class="muted small">${dinners.length}/${target}</span></h2>
+    ${weekHealth(dinners)}
     <div class="stack">${dinners.map(mealCard).join('') || '<div class="empty">Nothing planned yet.</div>'}</div>
     <div class="row" style="margin-top:12px">
       ${dinners.length < target ? '<button class="primary" data-act="suggestWeek">✨ Suggest ' + (target - dinners.length) + '</button>' : ''}
@@ -571,6 +572,22 @@ function groceriesSection(entries) {
     </div>` : ''}`;
 }
 
+// Weekly dinner health. Past weeks average 5.5; aiming for 6+ nudges the plan without nagging every week.
+const WEEK_GOOD = 6, WEEK_LOW = 5, DINNER_LOW = 4;
+
+function weekHealth(dinners) {
+  const scored = dinners.map(e => ({ e, r: recipe(e.recipe_id) })).filter(x => x.r)
+    .map(x => Object.assign(x, { q: quickFacts(x.r) })).filter(x => x.q);
+  if (scored.length < 2) return '';
+  const avg = scored.reduce((t, x) => t + x.q.score, 0) / scored.length;
+  const allLow = scored.every(x => x.q.score <= DINNER_LOW);
+  const worst = scored.slice().sort((a, b) => a.q.score - b.q.score)[0];
+  const level = avg >= WEEK_GOOD && !allLow ? 'good' : avg >= WEEK_LOW && !allLow ? 'warn' : 'bad';
+  const text = { good: 'Healthy week', warn: 'Could be healthier', bad: 'Unhealthy week' }[level];
+  return `<div class="weekhealth ${level}"><span><b>${String(Math.round(avg * 10) / 10)}</b>/10 · ${text}</span>
+    ${level === 'good' ? '' : `<span class="small">Aim for ${WEEK_GOOD}+ – try swapping <a href="#/r/${worst.r.id}">${esc(worst.r.title)}</a> (${worst.q.score}/10) for something lighter.</span>`}</div>`;
+}
+
 function mealCard(e) {
   const r = recipe(e.recipe_id);
   const logged = yes(e.done);
@@ -578,6 +595,7 @@ function mealCard(e) {
     ${r ? `<a href="#/r/${r.id}?p=${esc(e.portions)}">${thumb(r)}</a>` : '<div class="thumb">📝</div>'}
     <div class="grow">
       <div class="title">${r ? `<a href="#/r/${r.id}?p=${esc(e.portions)}" style="color:inherit">${esc(r.title)}</a>` : esc(e.title)}</div>
+      ${(q => q ? `<div class="qf">${q.score}/10${q.cost != null ? ` · £${q.cost.toFixed(2)} pp` : ''}</div>` : '')(r && quickFacts(r))}
       <div class="row small" style="margin-top:6px;gap:6px">
         <span class="stepper"><button data-act="portions" data-id="${e.id}" data-n="-1">−</button><span>${esc(e.portions)}</span><button data-act="portions" data-id="${e.id}" data-n="1">+</button></span>
         <span class="muted">portions</span>
