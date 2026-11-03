@@ -324,7 +324,7 @@ function recipeFacts(r) {
   const n = {};
   NUTR.forEach(k => { n[k] = 0; });
   const groups = {};
-  let cost = 0, weight = 0, counted = 0, priced = 0, sweetSugar = 0;
+  let cost = 0, weight = 0, counted = 0, priced = 0, sweetSugar = 0, gl = 0;
   const missing = [], assumed = [], unmeasured = [];
   let main = 0;
   (r.ingredients || []).forEach(ing => {
@@ -341,14 +341,16 @@ function recipeFacts(r) {
     groups[it.group] = (groups[it.group] || 0) + g;
     NUTR.forEach(k => { n[k] += num(it[k], 0) * g / 100; });
     if (it.group === 'sweet') sweetSugar += num(it.sugar, 0) * g / 100; // free sugars, not fruit/veg/milk sugar
+    // Glycemic load = GI × digestible carbs / 100 (UK carbs already exclude fibre). Items without a GI barely have carbs.
+    gl += num(it.gi, 0) * num(it.carbs, 0) * g / 100 / 100;
     if (num(it.price, 0) && num(it.price_g, 0)) { cost += it.price / it.price_g * g; priced++; }
   });
   NUTR.forEach(k => { n[k] /= per; });
   Object.keys(groups).forEach(k => { groups[k] /= per; });
-  return { n, groups, cost: cost / per, weight: weight / per, sweetSugar: sweetSugar / per, counted, priced, missing, assumed, unmeasured, main, lines: (r.ingredients || []).length };
+  return { n, groups, cost: cost / per, weight: weight / per, sweetSugar: sweetSugar / per, gl: gl / per, counted, priced, missing, assumed, unmeasured, main, lines: (r.ingredients || []).length };
 }
 
-/** Health score 0–10: points for veg, oily fish, protein and fibre; minus for saturated fat, added sugar and processed meat. */
+/** Health score 0–10: points for veg, oily fish, protein, fibre and a low glycemic load; minus for saturated fat, added sugar, a high glycemic load and processed meat. */
 function healthScore(f) {
   const g = k => f.groups[k] || 0;
   const reasons = [];
@@ -359,6 +361,8 @@ function healthScore(f) {
   if (g('oily_fish') >= 60) add(2, 'oily fish');
   if (f.n.protein >= 25) add(1, 'good protein');
   if (f.n.fibre >= 8) add(1, 'high fibre');
+  // Glycemic load per portion: library median 34; a day under ~80 counts as low, over ~120 as high.
+  if (f.gl < 20) add(1, 'low glycemic load'); else if (f.gl > 60) add(-2, 'very high glycemic load'); else if (f.gl > 45) add(-1, 'high glycemic load');
   if (f.n.satfat > 10) add(-2, 'very high saturated fat'); else if (f.n.satfat > 6) add(-1, 'high saturated fat');
   if (f.sweetSugar > 20) add(-2, 'lots of added sugar'); else if (f.sweetSugar > 10) add(-1, 'added sugar');
   if (g('processed_meat') >= 30) add(-1, 'processed meat');
@@ -404,7 +408,8 @@ function factsPanel(r) {
     <div class="facts-body">
       <div class="reasons">${h.reasons.map(x => `<span class="${x.pts > 0 ? 'plus' : 'minus'}">${x.pts > 0 ? '+' : '−'}${Math.abs(x.pts)} ${esc(x.text)}</span>`).join('') || '<span class="muted">nothing stands out either way</span>'}</div>
       <div class="ngrid">${row('Energy', 'kcal', ' kcal')}${row('Protein', 'protein', ' g')}${row('Carbs', 'carbs', ' g')}${row('of which sugars', 'sugar', ' g')}
-        ${row('Fat', 'fat', ' g')}${row('of which saturates', 'satfat', ' g')}${row('Fibre', 'fibre', ' g')}${row('Salt', 'salt', ' g')}</div>
+        ${row('Fat', 'fat', ' g')}${row('of which saturates', 'satfat', ' g')}${row('Fibre', 'fibre', ' g')}${row('Salt', 'salt', ' g')}
+        <div class="nrow"><span>Glycemic load</span><b>${Math.round(f.gl)}</b></div></div>
       <p class="muted small">Rough figures from typical values for each ingredient, not counting salt added to taste${f.assumed.length ? ', including a little ' + esc([...new Set(f.assumed)].join(', ')) + ' where the recipe gives no amount' : ''}.
         ${f.missing.concat(f.unmeasured).length ? `Not counted: ${esc(f.missing.concat(f.unmeasured).join(', '))}.` : ''} Prices are ballpark Aldi prices for the amount used.</p>
     </div></details>`;
