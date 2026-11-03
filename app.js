@@ -21,7 +21,7 @@ let D = store.get('cache', null); // everything from bootstrap
 const UI = {
   week: weekOf(new Date()),
   rFilter: 'all', rSort: 'recent', rq: '',
-  portions: {}, got: {}, step: {},
+  portions: {}, got: {}, step: {}, swaps: {},
   draft: store.get('draft', null),
   showTrolley: false, showHome: false,
   basicsOpen: store.get('basicsOpen', false),
@@ -93,6 +93,15 @@ function toast(msg, err) {
 /** Runs an api call, showing errors as a toast. Returns undefined on failure. */
 async function run(action, payload) {
   try { return await api(action, payload); } catch (e) { toast(e.message, true); }
+}
+
+/** New ingredients get nutrition, price and swap data from Gemini in the background. */
+async function enrichNewItems() {
+  if (!cfg().api || !D.items.some(i => !i.group)) return;
+  try {
+    const res = await api('itemsEnrich', {});
+    if (res && res.items) { D.items = res.items; saveCache(); render(); }
+  } catch (e) { /* not urgent – it retries on the next save */ }
 }
 
 async function load() {
@@ -267,6 +276,145 @@ function shopQty(parts, each) {
     delete p.g; delete p.pc;
   }
   return out.concat(Object.keys(p).map(b => fmtShop(p[b], b))).filter(Boolean).join(' + ');
+}
+
+// ------------------------------------------------ nutrition, cost, health ---
+
+const NUTR = ['kcal', 'protein', 'carbs', 'sugar', 'fat', 'satfat', 'fibre', 'salt'];
+// Store-cupboard extras that recipes (Gousto especially) leave unmeasured: assumed grams per portion.
+const ASSUMED_G = { salt: 0.5, butter: 5, 'caster sugar': 2, 'brown sugar': 2, 'plain flour': 5, 'semi-skimmed milk': 20, milk: 20 };
+const OIL_G = 5; // a teaspoon of oil per portion
+// Groups that hardly change the totals; a recipe still counts as measured without their amounts.
+const MINOR_GROUPS = ['herb_spice', 'sauce', 'fat_oil', 'drink', 'other'];
+
+/** Grams of one recipe line, or null when it has no usable amount. */
+function gramsOf(ing, it) {
+  const q = Number(ing.qty);
+  if (ing.qty === '' || ing.qty == null || !isFinite(q)) return null;
+  const ml = num(it && it.ml_g, 1) || 1;
+  const each = num(it && it.each_g, 0);
+  switch (String(ing.unit || '').toLowerCase()) {
+    case 'g': return q;
+    case 'kg': return q * 1000;
+    case 'ml': return q * ml;
+    case 'l': return q * 1000 * ml;
+    case 'tsp': return q * 5 * ml;
+    case 'tbsp': return q * 15 * ml;
+    case 'pinch': return q * 0.4;
+    case 'tin': return q * (each >= 150 ? each : 400);
+    case 'pack': return (num(it && it.price_g, 0) || each) * q || null;
+    case 'bunch': return q * 30;
+    default: return each ? q * each : null; // pc, clove, slice or no unit
+  }
+}
+
+/** Grams for nutrition: the measured amount, or a small assumed amount for unmeasured oil, butter, salt… */
+function usedGrams(ing, it, per) {
+  const g = gramsOf(ing, it);
+  if (g != null) return { g, assumed: false };
+  const a = it.group === 'fat_oil' ? OIL_G : ASSUMED_G[it.name] || 0;
+  return { g: a * per, assumed: a > 0 };
+}
+
+/** Per-portion nutrition, cost and food-group grams for a recipe, from the Items reference data. */
+function recipeFacts(r) {
+  const items = itemMap();
+  const per = num(r.servings, 0) || 4;
+  const n = {};
+  NUTR.forEach(k => { n[k] = 0; });
+  const groups = {};
+  let cost = 0, weight = 0, counted = 0, priced = 0, sweetSugar = 0;
+  const missing = [], assumed = [], unmeasured = [];
+  let main = 0;
+  (r.ingredients || []).forEach(ing => {
+    const it = items[ing.item_id] || findItem(ing.item);
+    if (!it || !it.group) { missing.push(ing.item); return; }
+    const isMain = MINOR_GROUPS.indexOf(it.group) < 0;
+    if (isMain) main++;
+    const { g, assumed: est } = usedGrams(ing, it, per);
+    if (!g) { if (isMain) unmeasured.push(ing.item); return; } // "to taste" herbs, pepper…
+    if (est) assumed.push(it.name);
+    counted++;
+    weight += g;
+    groups[it.group] = (groups[it.group] || 0) + g;
+    NUTR.forEach(k => { n[k] += num(it[k], 0) * g / 100; });
+    if (it.group === 'sweet') sweetSugar += num(it.sugar, 0) * g / 100; // free sugars, not fruit/veg/milk sugar
+    if (num(it.price, 0) && num(it.price_g, 0)) { cost += it.price / it.price_g * g; priced++; }
+  });
+  NUTR.forEach(k => { n[k] /= per; });
+  Object.keys(groups).forEach(k => { groups[k] /= per; });
+  return { n, groups, cost: cost / per, weight: weight / per, sweetSugar: sweetSugar / per, counted, priced, missing, assumed, unmeasured, main, lines: (r.ingredients || []).length };
+}
+
+/** Health score 0–10: points for veg, oily fish, lean protein and fibre; minus for saturated fat, added sugar, salt, processed and lots of red meat. */
+function healthScore(f) {
+  const g = k => f.groups[k] || 0;
+  const reasons = [];
+  let s = 4;
+  const add = (pts, text) => { s += pts; reasons.push({ pts, text }); };
+  const five = (g('veg') + g('fruit') + Math.min(g('legume'), 80)) / 80;
+  if (five >= 1) add(Math.min(3, Math.floor(five)), `${fmtNum(five)} of your 5-a-day`);
+  if (g('oily_fish') >= 60) add(2, 'oily fish');
+  if (g('white_fish') + g('seafood') + g('poultry') >= 80 || g('legume') >= 60) add(1, 'lean protein');
+  if (f.n.fibre >= 8) add(1, 'high fibre');
+  if (f.n.satfat > 10) add(-2, 'very high saturated fat'); else if (f.n.satfat > 6) add(-1, 'high saturated fat');
+  if (f.sweetSugar > 20) add(-2, 'lots of added sugar'); else if (f.sweetSugar > 10) add(-1, 'added sugar');
+  if (f.n.salt > 4) add(-2, 'very salty'); else if (f.n.salt > 2.5) add(-1, 'salty');
+  if (g('processed_meat') >= 30) add(-1, 'processed meat');
+  if (g('red_meat') > 120) add(-1, 'a lot of red meat');
+  s = Math.max(0, Math.min(10, s));
+  const label = s >= 8 ? 'Very healthy' : s >= 6 ? 'Healthy' : s >= 4 ? 'Balanced' : s >= 2 ? 'Indulgent' : 'A treat';
+  return { score: s, label, reasons };
+}
+
+/** UK front-of-pack colours: per 100 g, or red when one portion is over 30 % of the daily reference intake. */
+function trafficLight(k, perPortion, weight) {
+  const T = { fat: [3, 17.5, 21], satfat: [1.5, 5, 6], sugar: [5, 22.5, 27], salt: [0.3, 1.5, 1.8] }[k];
+  if (!T || !weight) return '';
+  const p100 = perPortion / weight * 100;
+  return p100 > T[1] || perPortion > T[2] ? 'red' : p100 > T[0] ? 'amber' : 'green';
+}
+
+/** Score and cost for lists, cached until the recipes or items change. */
+let quickCache = { recipes: null, items: null, m: new Map() };
+function quickFacts(r) {
+  if (quickCache.recipes !== D.recipes || quickCache.items !== D.items) quickCache = { recipes: D.recipes, items: D.items, m: new Map() };
+  if (!quickCache.m.has(r.id)) {
+    const f = recipeFacts(r);
+    const ok = f.counted && f.unmeasured.length <= Math.max(1, f.main * 0.25);
+    quickCache.m.set(r.id, ok ? { score: healthScore(f).score, cost: f.priced ? f.cost : null } : null);
+  }
+  return quickCache.m.get(r.id);
+}
+
+function factsPanel(r) {
+  const f = recipeFacts(r);
+  if (!f.counted) return '';
+  if (f.unmeasured.length > Math.max(1, f.main * 0.25)) {
+    return `<p class="facts-missing">Nutrition and price need amounts for ${esc(f.unmeasured.slice(0, 6).join(', '))}${f.unmeasured.length > 6 ? '…' : ''} – <a href="#/edit/${r.id}">add them</a>.</p>`;
+  }
+  const h = healthScore(f);
+  const row = (label, k, unit) => {
+    const v = f.n[k];
+    const tl = trafficLight(k, v, f.weight);
+    return `<div class="nrow"><span>${tl ? `<i class="tl ${tl}"></i>` : ''}${label}</span><b>${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10}${unit}</b></div>`;
+  };
+  return `<details class="facts">
+    <summary><span class="hs"><b>${h.score}</b>/10 · ${h.label}</span><span>${Math.round(f.n.kcal)} kcal</span>${f.priced ? `<span>≈ £${f.cost.toFixed(2)}</span>` : ''}<span class="more">per portion</span></summary>
+    <div class="facts-body">
+      <div class="reasons">${h.reasons.map(x => `<span class="${x.pts > 0 ? 'plus' : 'minus'}">${x.pts > 0 ? '+' : '−'}${Math.abs(x.pts)} ${esc(x.text)}</span>`).join('') || '<span class="muted">nothing stands out either way</span>'}</div>
+      <div class="ngrid">${row('Energy', 'kcal', ' kcal')}${row('Protein', 'protein', ' g')}${row('Carbs', 'carbs', ' g')}${row('of which sugars', 'sugar', ' g')}
+        ${row('Fat', 'fat', ' g')}${row('of which saturates', 'satfat', ' g')}${row('Fibre', 'fibre', ' g')}${row('Salt', 'salt', ' g')}</div>
+      <p class="muted small">Rough figures from typical values for each ingredient${f.assumed.length ? ', including a little ' + esc([...new Set(f.assumed)].join(', ')) + ' where the recipe gives no amount' : ''}.
+        ${f.missing.concat(f.unmeasured).length ? `Not counted: ${esc(f.missing.concat(f.unmeasured).join(', '))}.` : ''} Prices are ballpark Aldi prices for the amount used.</p>
+    </div></details>`;
+}
+
+function swapHint(r, ing, n) {
+  const it = itemMap()[ing.item_id] || findItem(ing.item);
+  if (!it || !it.swap) return '';
+  const key = r.id + ':' + n;
+  return ` <button class="swap" data-act="swapHint" data-k="${key}">swap?</button>${UI.swaps[key] ? `<span class="swaptext">${esc(it.swap)}</span>` : ''}`;
 }
 
 // -------------------------------------------------------------- plan ---
@@ -496,7 +644,7 @@ function listRow(l) {
 VIEWS.recipes = () => {
   const filters = [['all', 'All']].concat(GROUPS, [
     ['staple', '⭐ Staples'], ['lately', '⏳ Not lately'], ['new', '🆕 Never cooked'], ['never', '🚫 Never again']]);
-  const sorts = [['recent', 'Recently cooked'], ['most', 'Most cooked'], ['rating', 'Top rated'], ['az', 'A–Z'], ['added', 'Newest']];
+  const sorts = [['recent', 'Recently cooked'], ['most', 'Most cooked'], ['rating', 'Top rated'], ['healthy', 'Healthiest'], ['cheap', 'Cheapest'], ['az', 'A–Z'], ['added', 'Newest']];
   return demoBanner() + `
     <div class="row"><div class="search grow"><input data-in="recipeSearch" value="${esc(UI.rq)}" placeholder="Search recipes or ingredients"></div>
       <a class="btn primary" href="#/add">＋ Add</a></div>
@@ -527,6 +675,8 @@ function recipeResults() {
     rating: (a, b) => g(b, 'avg') - g(a, 'avg'),
     az: (a, b) => a.title.localeCompare(b.title),
     added: (a, b) => String(b.created || '').localeCompare(String(a.created || '')),
+    healthy: (a, b) => ((quickFacts(b) || {}).score ?? -1) - ((quickFacts(a) || {}).score ?? -1),
+    cheap: (a, b) => ((quickFacts(a) || {}).cost ?? 99) - ((quickFacts(b) || {}).cost ?? 99),
   };
   list = list.sort(sorters[UI.rSort] || sorters.recent);
   if (!list.length) return '<div class="empty">No recipes here yet.</div>';
@@ -536,7 +686,8 @@ function recipeResults() {
       ${r.image ? `<div class="img" style="background-image:url('${esc(r.image)}')"></div>` : `<div class="img">${emoji(r)}</div>`}
       <div class="body">${source(r).name ? `<div class="src">${esc(source(r).name)}</div>` : ''}<div class="t">${esc(r.title)}</div>
         <div class="small">${s && s.n ? stars(s.avg) : ''} ${verdict(s)}</div>
-        <div class="muted small">${s ? `${s.count}× · ${ago(s.last)}` : 'not cooked yet'}</div></div></a>`;
+        <div class="muted small">${s ? `${s.count}× · ${ago(s.last)}` : 'not cooked yet'}</div>
+        ${(q => q ? `<div class="qf">${q.score}/10${q.cost != null ? ` · £${q.cost.toFixed(2)}` : ''}</div>` : '')(quickFacts(r))}</div></a>`;
   }).join('') + '</div>';
 }
 
@@ -576,6 +727,7 @@ VIEWS.r = rt => {
     <div class="row small muted" style="margin-top:4px">${r.time_mins ? '⏱ ' + esc(r.time_mins) + ' min' : ''} ${chillies(r)}</div>
     <div>${String(r.tags || '').split(',').filter(t => t.trim()).map(t => `<span class="tag">${esc(t.trim())}</span>`).join('')}</div>
     ${r.description ? `<p class="muted">${esc(r.description)}</p>` : ''}
+    ${factsPanel(r)}
     <div class="row" style="margin:12px 0">
       <button class="primary" data-act="addToWeek" data-id="${r.id}">＋ This week</button>
       <button data-act="rateRecipe" data-id="${r.id}">We ate this ★</button>
@@ -585,7 +737,7 @@ VIEWS.r = rt => {
       <span class="stepper"><button data-act="rPortions" data-id="${r.id}" data-n="-1">−</button><span>${p}</span><button data-act="rPortions" data-id="${r.id}" data-n="1">+</button></span>
       <span class="muted small">portions</span></div>
     <ul class="ings">${(r.ingredients || []).map((i, n) => `<li class="${got[n] ? 'got' : ''}" data-act="gotIng" data-id="${r.id}" data-n="${n}">
-      <span class="q">${esc(fmtQty(i.qty === '' ? '' : Number(i.qty) * f, i.unit))}</span><span>${esc(i.item)}${i.note ? ` <span class="muted">${esc(i.note)}</span>` : ''}</span></li>`).join('')}</ul>
+      <span class="q">${esc(fmtQty(i.qty === '' ? '' : Number(i.qty) * f, i.unit))}</span><span>${esc(i.item)}${i.note ? ` <span class="muted">${esc(i.note)}</span>` : ''}${swapHint(r, i, n)}</span></li>`).join('')}</ul>
     <h2>Method</h2>
     <ol class="steps">${(r.steps || []).map((s, n) => `<li data-act="step" data-id="${r.id}" data-n="${n}" class="${cur === n ? 'cur' : cur > n ? 'past' : ''}">${esc(s)}</li>`).join('')}</ol>
     ${(r.tips || []).length ? `<div class="tips" style="margin-top:14px"><b>💡 Why it works</b><ul>${r.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
@@ -1013,6 +1165,7 @@ const ACT = {
   // recipes
   rFilter: el => { UI.rFilter = el.dataset.k; render(); },
   rPortions: el => { UI.portions[el.dataset.id] = Math.max(1, (UI.portions[el.dataset.id] || defPortions()) + Number(el.dataset.n)); render(); },
+  swapHint: el => { UI.swaps[el.dataset.k] = !UI.swaps[el.dataset.k]; render(); },
   gotIng: el => { const g = UI.got[el.dataset.id] || (UI.got[el.dataset.id] = {}); g[el.dataset.n] = !g[el.dataset.n]; render(); },
   step: el => { const n = Number(el.dataset.n); UI.step[el.dataset.id] = UI.step[el.dataset.id] === n ? undefined : n; render(); },
   addToWeek: el => {
@@ -1115,6 +1268,7 @@ const ACT = {
     D.items = res.items;
     saveCache();
     setDraft(null);
+    enrichNewItems();
     if (addWeek) savePlan(addWeek, weekEntries(addWeek).concat([planEntry(res.recipe, groupOf(res.recipe.type))]));
     location.hash = '#/r/' + res.recipe.id;
   },

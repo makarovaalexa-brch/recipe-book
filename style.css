@@ -244,3 +244,31 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation-duration: 0s !important; } }
 
 b, strong { font-weight: 600; }
+
+/* Nutrition, health score and cost: a quiet expandable strip under the description */
+.facts { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 10px 0 4px; }
+.facts summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; padding: 10px 0;
+  font-size: .7rem; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.facts summary::-webkit-details-marker { display: none; }
+.facts summary .hs { color: var(--ink); }
+.facts summary .hs b { font: 500 1.5rem/1 var(--serif); letter-spacing: 0; color: var(--accent); }
+.facts summary .more { margin-left: auto; }
+.facts summary .more::after { content: " +"; }
+.facts[open] summary .more::after { content: " \2212"; }
+.facts-body { padding: 0 0 12px; }
+.reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.reasons span { font-size: .72rem; letter-spacing: .04em; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+.reasons .plus { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.reasons .minus { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+.ngrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); column-gap: 28px; }
+.nrow { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.nrow b { font-weight: 500; }
+.tl { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+.tl.green { background: var(--good); } .tl.amber { background: var(--warn); } .tl.red { background: var(--bad); }
+
+/* Swap hint on an ingredient */
+button.swap { border: 0; background: none; padding: 0 2px; min-height: 0; font: italic 500 .95rem var(--serif); letter-spacing: 0;
+  text-transform: none; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.swaptext { display: block; margin-top: 4px; font: italic 1rem/1.35 var(--serif); color: var(--muted); }
+.facts-missing { font: italic 1rem var(--serif); color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 0; margin: 10px 0 4px; }
+.rcard .qf { font-size: .62rem; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-top: 3px; }
