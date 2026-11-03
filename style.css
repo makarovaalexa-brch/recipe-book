@@ -272,3 +272,4 @@ button.swap { border: 0; background: none; padding: 0 2px; min-height: 0; font: 
 .swaptext { display: block; margin-top: 4px; font: italic 1rem/1.35 var(--serif); color: var(--muted); }
 .facts-missing { font: italic 1rem var(--serif); color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 0; margin: 10px 0 4px; }
 .rcard .qf { font-size: .62rem; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-top: 3px; }
+.li .swapnote { display: block; margin-top: 2px; font: italic .95rem/1.3 var(--serif); color: var(--accent); }

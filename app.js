@@ -631,10 +631,16 @@ VIEWS.list = () => {
     </div>`;
 };
 
+/** Swap hint under a list row, for deciding in the shop when the item isn't there. */
+function listSwap(l) {
+  const it = D.items.find(i => i.id === l.item_id);
+  return it && it.swap && !yes(l.checked) ? `<span class="swapnote">If not in stock: ${esc(it.swap)}</span>` : '';
+}
+
 function listRow(l) {
   return `<div class="li ${yes(l.checked) ? 'checked' : ''}">
     <input type="checkbox" data-act="tick" data-id="${l.id}" ${yes(l.checked) ? 'checked' : ''} aria-label="Got it">
-    <div class="name" data-act="tick" data-id="${l.id}">${esc(l.name)}${l.note ? `<span class="note">${esc(l.note)}</span>` : ''}</div>
+    <div class="name" data-act="tick" data-id="${l.id}">${esc(l.name)}${l.note ? `<span class="note">${esc(l.note)}</span>` : ''}${listSwap(l)}</div>
     <span class="qty">${esc([l.qty, l.unit].filter(Boolean).join(' '))}</span>
     ${yes(l.checked) ? '' : `<button class="ghost small" data-act="setStatus" data-id="${l.id}" data-s="home" aria-label="Already have it" title="Already have it">🏠</button>`}
     <button class="ghost small" data-act="editRow" data-id="${l.id}" aria-label="Edit">⋯</button>
