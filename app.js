@@ -348,7 +348,7 @@ function recipeFacts(r) {
   return { n, groups, cost: cost / per, weight: weight / per, sweetSugar: sweetSugar / per, counted, priced, missing, assumed, unmeasured, main, lines: (r.ingredients || []).length };
 }
 
-/** Health score 0–10: points for veg, oily fish, lean protein and fibre; minus for saturated fat, added sugar, salt and processed meat. */
+/** Health score 0–10: points for veg, oily fish, protein and fibre; minus for saturated fat, added sugar and processed meat. */
 function healthScore(f) {
   const g = k => f.groups[k] || 0;
   const reasons = [];
@@ -357,11 +357,10 @@ function healthScore(f) {
   const five = (g('veg') + g('fruit') + Math.min(g('legume'), 80)) / 80;
   if (five >= 1) add(Math.min(3, Math.floor(five)), `${fmtNum(five)} of your 5-a-day`);
   if (g('oily_fish') >= 60) add(2, 'oily fish');
-  if (g('white_fish') + g('seafood') + g('poultry') >= 80 || g('legume') >= 60) add(1, 'lean protein');
+  if (f.n.protein >= 25) add(1, 'good protein');
   if (f.n.fibre >= 8) add(1, 'high fibre');
   if (f.n.satfat > 10) add(-2, 'very high saturated fat'); else if (f.n.satfat > 6) add(-1, 'high saturated fat');
   if (f.sweetSugar > 20) add(-2, 'lots of added sugar'); else if (f.sweetSugar > 10) add(-1, 'added sugar');
-  if (f.n.salt > 4) add(-2, 'very salty'); else if (f.n.salt > 2.5) add(-1, 'salty');
   if (g('processed_meat') >= 30) add(-1, 'processed meat');
   s = Math.max(0, Math.min(10, s));
   const label = s >= 8 ? 'Very healthy' : s >= 6 ? 'Healthy' : s >= 4 ? 'Balanced' : s >= 2 ? 'Indulgent' : 'A treat';
