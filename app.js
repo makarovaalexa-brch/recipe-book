@@ -282,7 +282,8 @@ function shopQty(parts, each) {
 
 const NUTR = ['kcal', 'protein', 'carbs', 'sugar', 'fat', 'satfat', 'fibre', 'salt'];
 // Store-cupboard extras that recipes (Gousto especially) leave unmeasured: assumed grams per portion.
-const ASSUMED_G = { salt: 0.5, butter: 5, 'caster sugar': 2, 'brown sugar': 2, 'plain flour': 5, 'semi-skimmed milk': 20, milk: 20 };
+// Added salt is left out altogether: it's to taste, so only salt inside other ingredients (stock, cheese, sauces) counts.
+const ASSUMED_G = { butter: 5, 'caster sugar': 2, 'brown sugar': 2, 'plain flour': 5, 'semi-skimmed milk': 20, milk: 20 };
 const OIL_G = 5; // a teaspoon of oil per portion
 // Groups that hardly change the totals; a recipe still counts as measured without their amounts.
 const MINOR_GROUPS = ['herb_spice', 'sauce', 'fat_oil', 'drink', 'other'];
@@ -329,6 +330,7 @@ function recipeFacts(r) {
   (r.ingredients || []).forEach(ing => {
     const it = items[ing.item_id] || findItem(ing.item);
     if (!it || !it.group) { missing.push(ing.item); return; }
+    if (it.name === 'salt') return;
     const isMain = MINOR_GROUPS.indexOf(it.group) < 0;
     if (isMain) main++;
     const { g, assumed: est } = usedGrams(ing, it, per);
@@ -405,7 +407,7 @@ function factsPanel(r) {
       <div class="reasons">${h.reasons.map(x => `<span class="${x.pts > 0 ? 'plus' : 'minus'}">${x.pts > 0 ? '+' : '−'}${Math.abs(x.pts)} ${esc(x.text)}</span>`).join('') || '<span class="muted">nothing stands out either way</span>'}</div>
       <div class="ngrid">${row('Energy', 'kcal', ' kcal')}${row('Protein', 'protein', ' g')}${row('Carbs', 'carbs', ' g')}${row('of which sugars', 'sugar', ' g')}
         ${row('Fat', 'fat', ' g')}${row('of which saturates', 'satfat', ' g')}${row('Fibre', 'fibre', ' g')}${row('Salt', 'salt', ' g')}</div>
-      <p class="muted small">Rough figures from typical values for each ingredient${f.assumed.length ? ', including a little ' + esc([...new Set(f.assumed)].join(', ')) + ' where the recipe gives no amount' : ''}.
+      <p class="muted small">Rough figures from typical values for each ingredient, not counting salt added to taste${f.assumed.length ? ', including a little ' + esc([...new Set(f.assumed)].join(', ')) + ' where the recipe gives no amount' : ''}.
         ${f.missing.concat(f.unmeasured).length ? `Not counted: ${esc(f.missing.concat(f.unmeasured).join(', '))}.` : ''} Prices are ballpark Aldi prices for the amount used.</p>
     </div></details>`;
 }
