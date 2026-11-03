@@ -572,8 +572,8 @@ function groceriesSection(entries) {
     </div>` : ''}`;
 }
 
-// Weekly dinner health. Past weeks average 5.5; aiming for 6+ nudges the plan without nagging every week.
-const WEEK_GOOD = 6, WEEK_LOW = 5, DINNER_LOW = 4;
+// Weekly dinner health. Past weeks average 5.5; 7+ counts as a healthy week (only ~1 in 10 past weeks got there).
+const WEEK_GOOD = 7, WEEK_LOW = 5, DINNER_LOW = 4;
 
 function weekHealth(dinners) {
   const scored = dinners.map(e => ({ e, r: recipe(e.recipe_id) })).filter(x => x.r)
