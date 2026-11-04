@@ -25,6 +25,7 @@ const UI = {
   draft: store.get('draft', null),
   showTrolley: false, showHome: false,
   basicsOpen: store.get('basicsOpen', false),
+  restockOpen: store.get('restockOpen', false),
   wake: null,
 };
 
@@ -538,10 +539,10 @@ VIEWS.week = () => {
   const thisWeek = wk === weekOf(new Date());
   return demoBanner() + `
     <div class="row">
-      <button class="ghost" data-act="weekMove" data-n="-7" aria-label="Previous week">‹</button>
+      <button class="ghost weeknav" data-act="weekMove" data-n="-7" aria-label="Previous week">‹</button>
       <div class="grow weekhead"><b>${thisWeek ? 'This week' : 'Week of ' + nice(wk, { weekday: 'short', day: 'numeric', month: 'short' })}</b>
         <div class="muted small">${nice(wk)} – ${nice(addDays(wk, 6))}</div></div>
-      <button class="ghost" data-act="weekMove" data-n="7" aria-label="Next week">›</button>
+      <button class="ghost weeknav" data-act="weekMove" data-n="7" aria-label="Next week">›</button>
     </div>
     <h2>Dinners <span class="muted small">${dinners.length}/${target}</span></h2>
     ${weekHealth(dinners)}
@@ -572,6 +573,7 @@ function groceriesSection(entries) {
   const basics = D.items.filter(i => yes(i.weekly)).sort((a, b) => a.name.localeCompare(b.name));
   return `<h2>Groceries <span class="muted small">no recipe needed</span></h2>
     <div class="search"><input id="gq" data-in="grocSearch" placeholder="Add anything… e.g. “sugar”, “2 ready desserts”" autocomplete="off" enterkeyhint="done"><div id="gsugg"></div></div>
+    ${extra.length ? `<p class="muted small" style="margin:8px 0 2px">Added for this week – tap to remove</p>` : ''}
     <div class="chips wrap">${extra.map(e => `<button class="chip on" data-act="unplan" data-id="${e.id}" title="Remove">${esc((e.qty ? e.qty + ' ' : '') + e.title)} ✕</button>`).join('')}</div>
     ${basics.length ? `<div class="basics">
       <button class="basics-head" data-act="toggleBasics" aria-expanded="${UI.basicsOpen}">
@@ -583,7 +585,30 @@ function groceriesSection(entries) {
       <div class="basics-list">${basics.map(i => `<label class="basic-row ${skip.has(i.id) ? 'off' : ''}">
         <input type="checkbox" data-act="grocSkip" data-id="${i.id}" ${skip.has(i.id) ? '' : 'checked'}>
         <span class="grow">${esc(i.name)}</span>${i.default_qty ? `<span class="muted small">${esc(i.default_qty)}</span>` : ''}</label>`).join('')}</div>` : ''}
-    </div>` : ''}`;
+    </div>` : ''}
+    ${restockSection(extra)}`;
+}
+
+/** Things bought now and then (household, cupboard): a checklist to glance through, tick what's running low. */
+function restockSection(extra) {
+  const items = D.items.filter(i => yes(i.restock));
+  if (!items.length) return '';
+  const added = new Map(extra.map(e => [e.item_id, e]));
+  const groups = {};
+  items.forEach(i => { (groups[i.aisle || 'Other'] = groups[i.aisle || 'Other'] || []).push(i); });
+  const aisles = Object.keys(groups).sort((a, b) => (a === 'Household' ? -1 : b === 'Household' ? 1 : aisleIdx(a) - aisleIdx(b)));
+  const n = items.filter(i => added.has(i.id)).length;
+  return `<div class="basics">
+      <button class="basics-head" data-act="toggleRestock" aria-expanded="${UI.restockOpen}">
+        <span class="grow">Running low? <span class="muted small">household & cupboard</span></span>
+        <span class="muted small">${n ? n + ' added' : 'check cupboards'}</span>
+        <span class="chev">${UI.restockOpen ? '−' : '+'}</span>
+      </button>
+      ${UI.restockOpen ? `<p class="muted small" style="margin:8px 0 4px">Tick anything that's running out – it goes on this week's list.</p>
+      ${aisles.map(a => `<h3 class="restock-aisle">${esc(a)}</h3><div class="basics-list">${groups[a].sort((x, y) => x.name.localeCompare(y.name)).map(i => `<label class="basic-row ${added.has(i.id) ? '' : 'off'}">
+        <input type="checkbox" data-act="restockTick" data-id="${i.id}" ${added.has(i.id) ? 'checked' : ''}>
+        <span class="grow">${esc(i.name)}</span>${i.default_qty ? `<span class="muted small">${esc(i.default_qty)}</span>` : ''}</label>`).join('')}</div>`).join('')}` : ''}
+    </div>`;
 }
 
 /** Wishlist recipes not planned this week, one tap to add. */
@@ -1131,6 +1156,12 @@ const ACT = {
     const skipped = entries.find(e => e.kind === 'skip' && e.item_id === el.dataset.id);
     const it = D.items.find(i => i.id === el.dataset.id);
     savePlan(UI.week, skipped ? entries.filter(e => e !== skipped) : entries.concat([Object.assign(groceryEntry(it), { kind: 'skip' })]));
+  },
+  toggleRestock: () => { UI.restockOpen = !UI.restockOpen; store.set('restockOpen', UI.restockOpen); render(); },
+  restockTick: el => {
+    const e = weekEntries(UI.week).find(x => x.kind === 'item' && x.item_id === el.dataset.id);
+    if (e) savePlan(UI.week, weekEntries(UI.week).filter(x => x.id !== e.id));
+    else addGrocery(D.items.find(i => i.id === el.dataset.id));
   },
   toggleBasics: () => { UI.basicsOpen = !UI.basicsOpen; store.set('basicsOpen', UI.basicsOpen); render(); },
   grocAdd: el => addGrocery(D.items.find(i => i.id === el.dataset.id), el.dataset.qty),

@@ -303,3 +303,8 @@ button.swap { border: 0; background: none; padding: 0 2px; min-height: 0; font: 
 .busy-sec { margin: 0; }
 .spinner.big { width: 40px; height: 40px; border-width: 3px; }
 button.primary .spinner, .btn.primary .spinner { border-color: color-mix(in srgb, var(--accent-ink) 35%, transparent); border-top-color: var(--accent-ink); }
+
+/* Week arrows: big, easy to hit */
+button.weeknav { font: 400 2.6rem/1 var(--serif); min-width: 52px; min-height: 52px; padding: 0 8px; color: var(--accent); border: 1px solid var(--line); border-radius: 50%; }
+button.weeknav:hover { background: var(--soft); }
+.restock-aisle { font: 500 .66rem var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; }
