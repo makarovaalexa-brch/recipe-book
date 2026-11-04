@@ -999,30 +999,42 @@ function openRate(r) {
 /* 🎓 Classics: a hand-picked library of traditional dishes (classics.js), each linked to a cook
  * known for doing it properly. Asking the AI for more ideas is a fallback underneath. */
 let cl = { kind: 'dinner', cuisine: '', seed: 1, all: false };
-function openClassics(kind) { cl = { kind: kind || 'dinner', cuisine: '', seed: Math.random(), all: false }; renderClassics(); }
+function openClassics(kind) { cl = { kind: kind || 'dinner', cuisine: '', seed: Math.random(), all: false, q: '' }; renderClassics(); }
 function shuffleKey(id) { let h = Math.floor(cl.seed * 1e6); for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 1000003; return h; }
-function renderClassics() {
+/** The classics matching the current filters; a search looks across every kind and cuisine. */
+function classicsList() {
   const hidden = new Set(String(S().classics_hidden || '').split(',').filter(Boolean));
   const inBook = c => D.recipes.some(r => (c.url && r.source_url === c.url) || normKey(r.title) === normKey(c.dish));
-  const pool = (window.CLASSICS || []).filter(c => groupOf(c.type) === cl.kind && !hidden.has(c.id));
-  const cuisines = pool.map(c => c.cuisine).filter((x, i, a) => a.indexOf(x) === i).sort();
-  const list = pool.filter(c => !cl.cuisine || c.cuisine === cl.cuisine)
+  const q = normKey(cl.q || '');
+  const pool = (window.CLASSICS || []).filter(c => !hidden.has(c.id) && (q || groupOf(c.type) === cl.kind));
+  const list = pool.filter(c => q ? normKey([c.dish, c.cuisine, c.source, c.learn].join(' ')).includes(q) : !cl.cuisine || c.cuisine === cl.cuisine)
     .sort((a, b) => (inBook(a) - inBook(b)) || shuffleKey(a.id) - shuffleKey(b.id));
-  const shown = cl.all ? list : list.slice(0, 8);
-  const y = ($('#modal .sheet') || {}).scrollTop || 0;
-  openModal(`<h2 style="margin-top:0">🎓 Learn a classic</h2>
-    <p class="muted small">Traditional dishes, each from a cook known for doing it properly. Pick one to import it into your book and this week.</p>
-    <div class="chips">${GROUPS.map(([k, l]) => `<button class="chip ${cl.kind === k ? 'on' : ''}" data-act="clKind" data-k="${k}">${l}</button>`).join('')}</div>
-    <div class="chips"><button class="chip ${cl.cuisine ? '' : 'on'}" data-act="clCuisine" data-k="">All</button>${cuisines.map(c => `<button class="chip ${cl.cuisine === c ? 'on' : ''}" data-act="clCuisine" data-k="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-    <div class="row"><span class="muted small grow">${list.length} to choose from</span><button class="ghost small" data-act="clShuffle">🔀 Shuffle</button></div>
+  return { list, inBook, cuisines: pool.map(c => c.cuisine).filter((x, i, a) => a.indexOf(x) === i).sort() };
+}
+
+function classicsCards() {
+  const { list, inBook } = classicsList();
+  const shown = cl.all || cl.q ? list : list.slice(0, 8);
+  return `<div class="row"><span class="muted small grow">${list.length} ${cl.q ? 'found' : 'to choose from'}</span>${cl.q ? '' : '<button class="ghost small" data-act="clShuffle">🔀 Shuffle</button>'}</div>
     <div class="stack" style="margin-top:6px">${shown.map(c => `<div class="card">
       <div class="row"><b class="grow">${esc(c.dish)}</b>${inBook(c) ? '<span class="badge good">in your book</span>' : ''}</div>
       <div class="muted small">${esc(c.cuisine)} · ${esc(c.source)}${c.effort === 'weekend' ? ' · weekend project' : ''} ${chillies(c)}</div>
       <p class="small" style="margin:6px 0">You’ll learn: ${esc(c.learn)}</p>
       <div class="row"><button class="small primary" data-act="importIdea" data-url="${esc(c.url)}" data-src="${esc(c.source)}">＋ Add to week</button>
         <a class="btn small" href="${esc(c.url)}" target="_blank" rel="noopener">Read ↗</a>
-        <button class="ghost small" data-act="clHide" data-id="${esc(c.id)}">Not for us</button></div></div>`).join('') || '<p class="muted">Nothing here yet.</p>'}</div>
-    ${list.length > shown.length ? `<button style="width:100%;margin-top:10px" data-act="clAll">Show all ${list.length}</button>` : ''}
+        <button class="ghost small" data-act="clHide" data-id="${esc(c.id)}">Not for us</button></div></div>`).join('') || `<p class="muted">${cl.q ? 'No classic matches – try the AI search below.' : 'Nothing here yet.'}</p>`}</div>
+    ${list.length > shown.length ? `<button style="width:100%;margin-top:10px" data-act="clAll">Show all ${list.length}</button>` : ''}`;
+}
+
+function renderClassics() {
+  const { cuisines } = classicsList();
+  const y = ($('#modal .sheet') || {}).scrollTop || 0;
+  openModal(`<h2 style="margin-top:0">🎓 Learn a classic</h2>
+    <p class="muted small">Traditional dishes, each from a cook known for doing it properly. Pick one to import it into your book and this week.</p>
+    <div class="chips">${GROUPS.map(([k, l]) => `<button class="chip ${cl.kind === k ? 'on' : ''}" data-act="clKind" data-k="${k}">${l}</button>`).join('')}</div>
+    <div class="search" style="margin:8px 0"><input id="clq" data-in="clSearch" value="${esc(cl.q)}" placeholder="Search all classics… e.g. “curry”, “Italian”, “pastry”" autocomplete="off"></div>
+    <div class="chips"><button class="chip ${cl.cuisine ? '' : 'on'}" data-act="clCuisine" data-k="">All</button>${cuisines.map(c => `<button class="chip ${cl.cuisine === c ? 'on' : ''}" data-act="clCuisine" data-k="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div id="clList">${classicsCards()}</div>
     <hr><b>Something else?</b> <span class="muted small">Ask the AI to find a traditional recipe from your trusted cooks (Settings).</span>
     <div class="stack" style="margin-top:8px"><input id="sHint" placeholder="e.g. “a proper French stew”, “uses leeks”, “Sunday roast”">
     <button data-act="runSurprise">Find ideas</button><div id="sResults"></div></div>`);
@@ -1094,8 +1106,8 @@ const ACT = {
   pickFree: el => pickDone(null, el.dataset.t),
   buildList: () => buildList(),
   openClassics: el => openClassics(el.dataset.kind),
-  clKind: el => { cl.kind = el.dataset.k; cl.cuisine = ''; cl.all = false; renderClassics(); },
-  clCuisine: el => { cl.cuisine = el.dataset.k; cl.all = false; renderClassics(); },
+  clKind: el => { cl.kind = el.dataset.k; cl.cuisine = ''; cl.all = false; cl.q = ''; renderClassics(); },
+  clCuisine: el => { cl.cuisine = el.dataset.k; cl.all = false; cl.q = ''; renderClassics(); },
   clShuffle: () => { cl.seed = Math.random(); renderClassics(); },
   clAll: () => { cl.all = true; renderClassics(); },
   clHide: async el => {
@@ -1515,6 +1527,7 @@ document.addEventListener('click', e => {
     ACT[el.dataset.act](el, e);
   } else if (e.target.id === 'modal') closeModal();
 });
+IN.clSearch = el => { cl.q = el.value; $('#clList').innerHTML = classicsCards(); };
 document.addEventListener('input', e => { const el = e.target; if (el.dataset.in && IN[el.dataset.in]) IN[el.dataset.in](el); });
 document.addEventListener('change', e => { const el = e.target; if (el.dataset.ch && CH[el.dataset.ch]) CH[el.dataset.ch](el); });
 document.addEventListener('keydown', e => {
