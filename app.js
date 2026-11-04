@@ -1022,7 +1022,8 @@ function classicsCards() {
       <div class="row"><b class="grow">${esc(c.dish)}</b>${inBook(c) ? '<span class="badge good">in your book</span>' : ''}</div>
       <div class="muted small">${esc(c.cuisine)} · ${esc(c.source)}${c.effort === 'weekend' ? ' · weekend project' : ''} ${chillies(c)}</div>
       <p class="small" style="margin:6px 0">You’ll learn: ${esc(c.learn)}</p>
-      <div class="row"><button class="small primary" data-act="importIdea" data-url="${esc(c.url)}" data-src="${esc(c.source)}">＋ Add to week</button>
+      <div class="row"><button class="small primary" data-act="importIdea" data-week="1" data-url="${esc(c.url)}" data-src="${esc(c.source)}">＋ Add to week</button>
+        ${inBook(c) ? '' : `<button class="small" data-act="importIdea" data-url="${esc(c.url)}" data-src="${esc(c.source)}">＋ Add to book</button>`}
         <a class="btn small" href="${esc(c.url)}" target="_blank" rel="noopener">Read ↗</a>
         <button class="ghost small" data-act="clHide" data-id="${esc(c.id)}">Not for us</button></div></div>`).join('') || `<p class="muted">${cl.q ? 'No classic matches – try the AI search below.' : 'Nothing here yet.'}</p>`}</div>
     ${list.length > shown.length ? `<button style="width:100%;margin-top:10px" data-act="clAll">Show all ${list.length}</button>` : ''}`;
@@ -1138,7 +1139,7 @@ const ACT = {
       <b>${esc(s.title)}</b> <span class="muted small">· ${esc(s.source)}</span>
       ${s.verified ? '<span class="badge good">✓ real recipe</span>' : '<span class="badge warn">couldn’t verify</span>'}
       <p class="small">${esc(s.why)}</p>${s.learn ? `<p class="small muted">You’ll learn: ${esc(s.learn)}</p>` : ''}
-      <div class="row">${s.verified ? `<button class="small primary" data-act="importIdea" data-url="${esc(s.url)}">Import & add to week</button><a class="btn small" href="${esc(s.url)}" target="_blank" rel="noopener">Open ↗</a>`
+      <div class="row">${s.verified ? `<button class="small primary" data-act="importIdea" data-week="1" data-url="${esc(s.url)}">＋ Add to week</button><button class="small" data-act="importIdea" data-url="${esc(s.url)}">＋ Add to book</button><a class="btn small" href="${esc(s.url)}" target="_blank" rel="noopener">Open ↗</a>`
         : `<a class="btn small" href="${esc(s.search_url)}" target="_blank" rel="noopener">Search for it ↗</a>`}</div></div>`).join('');
     $('#sResults').dataset.n = ideas.length;
   },
@@ -1146,8 +1147,8 @@ const ACT = {
     el.disabled = true;
     el.innerHTML = '<span class="spinner"></span> importing…';
     const draft = await run('importUrl', { url: el.dataset.url });
-    if (!draft) { el.disabled = false; el.textContent = 'Import & add to week'; return; }
-    draft.addToWeek = UI.week;
+    if (!draft) { el.disabled = false; el.textContent = el.dataset.week ? '＋ Add to week' : '＋ Add to book'; return; }
+    if (el.dataset.week) draft.addToWeek = UI.week;
     if (el.dataset.src) {
       draft.source_name = el.dataset.src;
       draft.tags = [].concat(draft.tags || []).concat(['classic']);
