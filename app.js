@@ -352,22 +352,28 @@ function recipeFacts(r) {
   return { n, groups, cost: cost / per, weight: weight / per, sweetSugar: sweetSugar / per, gl: gl / per, counted, priced, missing, assumed, unmeasured, main, lines: (r.ingredients || []).length };
 }
 
-/** Health score 0–10: points for veg, oily fish, protein, fibre and a low glycemic load; minus for saturated fat, added sugar, a high glycemic load and processed meat. */
+/** Health score 0–10, tuned to the family: weight (calories, protein), cholesterol (saturated fat),
+ * blood sugar (added sugar, glycemic load), plus veg, fibre and oily fish. Starts at 5 = an ordinary dinner. */
 function healthScore(f) {
   const g = k => f.groups[k] || 0;
   const reasons = [];
-  let s = 4;
+  let s = 5;
   const add = (pts, text) => { s += pts; reasons.push({ pts, text }); };
+  const kcal = Math.max(f.n.kcal, 1);
+  const pct = x => Math.round(x * 100) + '%';
   const five = (g('veg') + g('fruit') + Math.min(g('legume'), 80)) / 80;
-  if (five >= 1) add(Math.min(3, Math.floor(five)), `${fmtNum(five)} of your 5-a-day`);
-  if (g('oily_fish') >= 60) add(2, 'oily fish');
-  if (f.n.protein >= 25) add(1, 'good protein');
-  if (f.n.fibre >= 8) add(1, 'high fibre');
+  if (five >= 5) add(3, `${fmtNum(five)} of your 5-a-day`); else if (five >= 3) add(2, `${fmtNum(five)} of your 5-a-day`); else if (five >= 2) add(1, `${fmtNum(five)} of your 5-a-day`);
+  const prot = f.n.protein * 4 / kcal; // share of calories from protein
+  if (prot >= 0.35) add(2, `very high protein (${pct(prot)} of calories)`); else if (prot >= 0.25) add(1, `high protein (${pct(prot)} of calories)`);
+  if (f.n.fibre >= 10) add(1, 'high fibre');
+  if (g('oily_fish') >= 60) add(1, 'oily fish');
   // Glycemic load per portion: library median 34; a day under ~80 counts as low, over ~120 as high.
   if (f.gl < 20) add(1, 'low glycemic load'); else if (f.gl > 60) add(-2, 'very high glycemic load'); else if (f.gl > 45) add(-1, 'high glycemic load');
-  if (f.n.satfat > 10) add(-2, 'very high saturated fat'); else if (f.n.satfat > 6) add(-1, 'high saturated fat');
+  const sat = f.n.satfat * 9 / kcal; // NHS: keep saturated fat under ~10% of calories
+  if (sat > 0.20) add(-3, `saturated fat ${pct(sat)} of calories`); else if (sat > 0.16) add(-2, `saturated fat ${pct(sat)} of calories`); else if (sat > 0.12) add(-1, `saturated fat ${pct(sat)} of calories`);
   if (f.sweetSugar > 20) add(-2, 'lots of added sugar'); else if (f.sweetSugar > 10) add(-1, 'added sugar');
   if (g('processed_meat') >= 30) add(-1, 'processed meat');
+  if (kcal > 1200) add(-3, `${Math.round(kcal)} kcal a portion`); else if (kcal > 950) add(-2, `${Math.round(kcal)} kcal a portion`); else if (kcal > 750) add(-1, `${Math.round(kcal)} kcal a portion`);
   s = Math.max(0, Math.min(10, s));
   const label = s >= 8 ? 'Very healthy' : s >= 6 ? 'Healthy' : s >= 4 ? 'Balanced' : s >= 2 ? 'Indulgent' : 'A treat';
   return { score: s, label, reasons };
@@ -598,8 +604,8 @@ async function setWish(r, wish) {
   await run('recipeWish', { id: r.id, wish });
 }
 
-// Weekly dinner health. Past weeks average 5.5; 7+ counts as a healthy week (only ~1 in 10 past weeks got there).
-const WEEK_GOOD = 7, WEEK_LOW = 5, DINNER_LOW = 4;
+// Weekly dinner health. Past weeks average 5.0 on the family-tuned score; 6+ counts as a healthy week for now.
+const WEEK_GOOD = 6, WEEK_LOW = 5, DINNER_LOW = 4;
 
 function weekHealth(dinners) {
   const scored = dinners.map(e => ({ e, r: recipe(e.recipe_id) })).filter(x => x.r)
