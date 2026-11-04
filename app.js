@@ -1464,7 +1464,7 @@ function busy(stages) {
     const sec = Math.floor((Date.now() - t0) / 1000);
     const stage = stages.filter(x => sec >= x[0]).pop();
     el.querySelector('.busy-msg').textContent = stage[1];
-    el.querySelector('.busy-sec').textContent = sec + ' s – this can take up to a minute';
+    el.querySelector('.busy-sec').textContent = sec + ' s – this can take a minute or two';
   };
   tick();
   const timer = setInterval(tick, 1000);
