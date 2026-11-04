@@ -584,8 +584,10 @@ function groceriesSection(entries) {
 function wishRow(entries) {
   const planned = new Set(entries.map(e => e.recipe_id));
   const wished = activeRecipes().filter(r => r.wish && !planned.has(r.id));
-  if (!wished.length) return '';
-  return `<div class="wishrow"><span class="muted small">From your wishlist</span>
+  if (!wished.length) {
+    return `<div class="wishrow"><span class="muted small">♡ Wishlist – ${activeRecipes().some(r => r.wish) ? 'everything on it is already planned this week' : 'tap “♡ Save for later” on any recipe to keep ideas here'}.</span></div>`;
+  }
+  return `<div class="wishrow"><span class="muted small">♡ From your wishlist</span>
     <div class="chips wrap">${wished.map(r => `<button class="chip" data-act="wishAdd" data-id="${r.id}">＋ ${esc(r.title)}${r.wish !== 'soon' ? ` <span class="muted">· ${esc(r.wish)}</span>` : ''}</button>`).join('')}</div></div>`;
 }
 
