@@ -282,3 +282,8 @@ button.swap { border: 0; background: none; padding: 0 2px; min-height: 0; font: 
 .weekhealth.warn { border-color: var(--warn); } .weekhealth.warn b { color: var(--warn); }
 .weekhealth.bad { border-color: var(--bad); } .weekhealth.bad b { color: var(--bad); }
 .meal .qf { font-size: .62rem; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-top: 2px; }
+
+/* Wishlist */
+.wishline { font: italic 1.05rem var(--serif); color: var(--accent); margin: 8px 0 0; }
+.wishrow { margin-top: 14px; }
+.wishrow .chips { margin-top: 4px; }

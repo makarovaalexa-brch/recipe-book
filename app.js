@@ -540,6 +540,7 @@ VIEWS.week = () => {
     <h2>Dinners <span class="muted small">${dinners.length}/${target}</span></h2>
     ${weekHealth(dinners)}
     <div class="stack">${dinners.map(mealCard).join('') || '<div class="empty">Nothing planned yet.</div>'}</div>
+    ${wishRow(entries)}
     <div class="row" style="margin-top:12px">
       ${dinners.length < target ? '<button class="primary" data-act="suggestWeek">✨ Suggest ' + (target - dinners.length) + '</button>' : ''}
       <button data-act="openPicker" data-kind="dinner">＋ Add</button>
@@ -577,6 +578,22 @@ function groceriesSection(entries) {
         <input type="checkbox" data-act="grocSkip" data-id="${i.id}" ${skip.has(i.id) ? '' : 'checked'}>
         <span class="grow">${esc(i.name)}</span>${i.default_qty ? `<span class="muted small">${esc(i.default_qty)}</span>` : ''}</label>`).join('')}</div>` : ''}
     </div>` : ''}`;
+}
+
+/** Wishlist recipes not planned this week, one tap to add. */
+function wishRow(entries) {
+  const planned = new Set(entries.map(e => e.recipe_id));
+  const wished = activeRecipes().filter(r => r.wish && !planned.has(r.id));
+  if (!wished.length) return '';
+  return `<div class="wishrow"><span class="muted small">From your wishlist</span>
+    <div class="chips wrap">${wished.map(r => `<button class="chip" data-act="wishAdd" data-id="${r.id}">＋ ${esc(r.title)}${r.wish !== 'soon' ? ` <span class="muted">· ${esc(r.wish)}</span>` : ''}</button>`).join('')}</div></div>`;
+}
+
+async function setWish(r, wish) {
+  r.wish = wish;
+  saveCache();
+  render();
+  await run('recipeWish', { id: r.id, wish });
 }
 
 // Weekly dinner health. Past weeks average 5.5; 7+ counts as a healthy week (only ~1 in 10 past weeks got there).
@@ -673,7 +690,7 @@ function listRow(l) {
 }
 
 VIEWS.recipes = () => {
-  const filters = [['all', 'All']].concat(GROUPS, [
+  const filters = [['all', 'All'], ['wish', '♡ Wishlist']].concat(GROUPS, [
     ['staple', '⭐ Staples'], ['lately', '⏳ Not lately'], ['new', '🆕 Never cooked'], ['never', '🚫 Never again']]);
   const sorts = [['recent', 'Recently cooked'], ['most', 'Most cooked'], ['rating', 'Top rated'], ['healthy', 'Healthiest'], ['cheap', 'Cheapest'], ['az', 'A–Z'], ['added', 'Newest']];
   return demoBanner() + `
@@ -693,6 +710,7 @@ function recipeResults() {
     const s = st[r.id];
     if (q && !normKey(r.title + ' ' + (r.tags || '') + ' ' + (r.ingredients || []).map(i => i.item).join(' ')).includes(q)) return false;
     if (GROUPS.some(g => g[0] === f)) return groupOf(r.type) === f;
+    if (f === 'wish') return !!r.wish;
     if (f === 'staple') return s && s.count >= 3 && s.avg >= 4;
     if (f === 'lately') return s && s.avg >= 4 && daysSince(s.last) >= 42;
     if (f === 'new') return !s;
@@ -715,7 +733,7 @@ function recipeResults() {
     const s = st[r.id];
     return `<a class="rcard" href="#/r/${r.id}">
       ${r.image ? `<div class="img" style="background-image:url('${esc(r.image)}')"></div>` : `<div class="img">${emoji(r)}</div>`}
-      <div class="body">${source(r).name ? `<div class="src">${esc(source(r).name)}</div>` : ''}<div class="t">${esc(r.title)}</div>
+      <div class="body">${source(r).name ? `<div class="src">${r.wish ? '♥ ' : ''}${esc(source(r).name)}</div>` : r.wish ? '<div class="src">♥</div>' : ''}<div class="t">${esc(r.title)}</div>
         <div class="small">${s && s.n ? stars(s.avg) : ''} ${verdict(s)}</div>
         <div class="muted small">${s ? `${s.count}× · ${ago(s.last)}` : 'not cooked yet'}</div>
         ${(q => q ? `<div class="qf">${q.score}/10${q.cost != null ? ` · £${q.cost.toFixed(2)}` : ''}</div>` : '')(quickFacts(r))}</div></a>`;
@@ -759,9 +777,11 @@ VIEWS.r = rt => {
     <div>${String(r.tags || '').split(',').filter(t => t.trim()).map(t => `<span class="tag">${esc(t.trim())}</span>`).join('')}</div>
     ${r.description ? `<p class="muted">${esc(r.description)}</p>` : ''}
     ${factsPanel(r)}
+    ${r.wish ? `<p class="wishline">♥ On your wishlist${r.wish !== 'soon' ? ' – ' + esc(r.wish) : ''}</p>` : ''}
     <div class="row" style="margin:12px 0">
       <button class="primary" data-act="addToWeek" data-id="${r.id}">＋ This week</button>
       <button data-act="rateRecipe" data-id="${r.id}">We ate this ★</button>
+      <button data-act="wish" data-id="${r.id}">${r.wish ? '♥ On wishlist' : '♡ Save for later'}</button>
       <button data-act="wake">${UI.wake ? '🔆 Screen on' : '🔅 Keep screen on'}</button>
     </div>
     <div class="row"><h2 class="grow" style="margin:.8em 0 .3em">Ingredients</h2>
@@ -1205,6 +1225,19 @@ const ACT = {
     savePlan(UI.week, weekEntries(UI.week).concat([planEntry(r, groupOf(r.type), UI.portions[r.id])]));
     toast('Added to this week');
   },
+  wish: el => {
+    const r = recipe(el.dataset.id);
+    if (r.wish) { setWish(r, ''); toast('Removed from wishlist'); return; }
+    const what = prompt('Saving for later. What for? (optional – e.g. next week, Christmas)', '');
+    if (what === null) return;
+    setWish(r, what.trim() || 'soon');
+    toast('Saved to your wishlist ♥');
+  },
+  wishAdd: el => {
+    const r = recipe(el.dataset.id);
+    savePlan(UI.week, weekEntries(UI.week).concat([planEntry(r, groupOf(r.type))]));
+    toast('Added – it leaves the wishlist once you’ve eaten it');
+  },
   rateRecipe: el => openRate({ recipe_id: el.dataset.id, portions: UI.portions[el.dataset.id] }),
   wake: async () => {
     try {
@@ -1241,6 +1274,8 @@ const ACT = {
       const saved = await run('logAdd', { entry, plan_id: planId });
       if (!saved) return;
       D.log.push(saved);
+      const eaten = recipe(entry.recipe_id);
+      if (eaten && eaten.wish) setWish(eaten, ''); // cooked it – off the wishlist
       if (planId) { const p = D.plan.find(x => x.id === planId); if (p) p.done = true; }
       toast(rating.rating >= 4 ? 'Lovely – noted!' : 'Noted');
       render();
