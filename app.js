@@ -363,8 +363,8 @@ function healthScore(f) {
   const pct = x => Math.round(x * 100) + '%';
   const five = (g('veg') + g('fruit') + Math.min(g('legume'), 80)) / 80;
   if (five >= 5) add(3, `${fmtNum(five)} of your 5-a-day`); else if (five >= 3) add(2, `${fmtNum(five)} of your 5-a-day`); else if (five >= 2) add(1, `${fmtNum(five)} of your 5-a-day`);
-  const prot = f.n.protein * 4 / kcal; // share of calories from protein
-  if (prot >= 0.35) add(2, `very high protein (${pct(prot)} of calories)`); else if (prot >= 0.25) add(1, `high protein (${pct(prot)} of calories)`);
+  // Protein in grams per portion (library median 36 g); ~35 g+ a meal helps keep muscle on a GLP-1 and suits growing kids.
+  if (f.n.protein >= 45) add(2, `very high protein (${Math.round(f.n.protein)} g)`); else if (f.n.protein >= 35) add(1, `high protein (${Math.round(f.n.protein)} g)`);
   if (f.n.fibre >= 10) add(1, 'high fibre');
   if (g('oily_fish') >= 60) add(1, 'oily fish');
   // Glycemic load per portion: library median 34; a day under ~80 counts as low, over ~120 as high.
