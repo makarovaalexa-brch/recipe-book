@@ -220,7 +220,9 @@ function fmtQty(q, unit) {
   if (u === 'g' || u === 'kg') { const g = u === 'kg' ? q * 1000 : q; return g >= 1000 ? Math.round(g / 100) / 10 + ' kg' : roundW(g) + ' g'; }
   if (u === 'ml' || u === 'l') { const m = u === 'l' ? q * 1000 : q; return m >= 1000 ? Math.round(m / 100) / 10 + ' l' : roundW(m) + ' ml'; }
   if (u === 'tsp' || u === 'tbsp') { const t = u === 'tbsp' ? q * 3 : q; return t >= 3 ? fmtNum(t / 3) + ' tbsp' : fmtNum(t) + ' tsp'; }
-  if (u !== 'pinch') q = Math.max(0.5, Math.round(q * 2) / 2); // nobody uses 1¾ eggs
+  // Things you count are rounded up to whole ones (3½ cloves → 4); under one stays as ½.
+  if (['', 'pc', 'clove', 'tin', 'slice'].indexOf(u) >= 0 && q > 1) q = Math.ceil(q - 0.05);
+  else if (u !== 'pinch') q = Math.max(0.5, Math.round(q * 2) / 2); // nobody uses 1¾ eggs
   if (!u || u === 'pc') return fmtNum(q);
   return fmtNum(q) + ' ' + (q > 1 ? (PLURAL[u] || u) : u);
 }
