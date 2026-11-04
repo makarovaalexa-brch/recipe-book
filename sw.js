@@ -1,6 +1,6 @@
 // Caches the app shell so recipes open even with poor kitchen wifi.
 // Data is cached separately by app.js in localStorage.
-const CACHE = 'recipe-book-v31';
+const CACHE = 'recipe-book-v32';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'mock.js', 'classics.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png'];
 
 self.addEventListener('install', e => {
