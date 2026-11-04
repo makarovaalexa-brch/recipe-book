@@ -1145,9 +1145,11 @@ const ACT = {
   },
   importIdea: async el => {
     el.disabled = true;
-    el.innerHTML = '<span class="spinner"></span> importing…';
+    const stop = busy(IMPORT_STAGES);
     const draft = await run('importUrl', { url: el.dataset.url });
-    if (!draft) { el.disabled = false; el.textContent = el.dataset.week ? '＋ Add to week' : '＋ Add to book'; return; }
+    stop();
+    el.disabled = false;
+    if (!draft) return;
     if (el.dataset.week) draft.addToWeek = UI.week;
     if (el.dataset.src) {
       draft.source_name = el.dataset.src;
@@ -1445,13 +1447,31 @@ async function setStatus(ids, status) {
   if (list) { D.list = list; saveCache(); render(); }
 }
 
+/** Full-screen "working on it" layer for slow imports: stage messages and a seconds counter. Returns stop(). */
+function busy(stages) {
+  const el = document.createElement('div');
+  el.className = 'busy';
+  el.innerHTML = '<div class="busy-box"><span class="spinner big"></span><p class="busy-msg"></p><p class="busy-sec muted small"></p></div>';
+  document.body.appendChild(el);
+  const t0 = Date.now();
+  const tick = () => {
+    const sec = Math.floor((Date.now() - t0) / 1000);
+    const stage = stages.filter(x => sec >= x[0]).pop();
+    el.querySelector('.busy-msg').textContent = stage[1];
+    el.querySelector('.busy-sec').textContent = sec + ' s – this can take up to a minute';
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  return () => { clearInterval(timer); el.remove(); };
+}
+const IMPORT_STAGES = [[0, 'Opening the recipe…'], [4, 'Reading it with AI…'], [15, 'Converting amounts for a UK shop…'], [30, 'Still working – long recipes and videos take a while…']];
+
 async function importWith(btn, action, payload) {
   btn.disabled = true;
-  const label = btn.textContent;
-  btn.innerHTML = '<span class="spinner"></span> reading the recipe…';
+  const stop = busy(IMPORT_STAGES);
   const draft = await run(action, payload);
+  stop();
   btn.disabled = false;
-  btn.textContent = label;
   if (!draft) return;
   setDraft(draft);
   location.hash = '#/edit/new';
@@ -1612,14 +1632,19 @@ document.addEventListener('visibilitychange', async () => {
   if (p.get('api') && p.get('key')) store.set('cfg', { api: p.get('api'), key: p.get('key') });
   // Android share sheet → Add recipe
   const shared = [p.get('share_url'), p.get('share_text'), p.get('share_title')].filter(Boolean).join(' ');
+  let autoImport = false;
   if (shared) {
     const url = (shared.match(/https?:\/\/\S+/) || [''])[0];
     const textOnly = shared.replace(url, '').trim();
-    location.hash = url && textOnly.length < 80 ? '#/add?tab=link&url=' + encodeURIComponent(url)
+    autoImport = !!url && textOnly.length < 80; // a shared link starts importing straight away
+    location.hash = autoImport ? '#/add?tab=link&url=' + encodeURIComponent(url)
       : '#/add?tab=text&text=' + encodeURIComponent(shared) + '&url=' + encodeURIComponent(url);
   }
   if (p.toString()) history.replaceState(null, '', location.pathname + location.hash);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   render();
-  load();
+  load().then(() => {
+    const btn = $('[data-act="importUrl"]');
+    if (autoImport && btn && $('#impUrl').value) ACT.importUrl(btn);
+  });
 })();
