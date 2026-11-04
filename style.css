@@ -287,3 +287,10 @@ button.swap { border: 0; background: none; padding: 0 2px; min-height: 0; font: 
 .wishline { font: italic 1.05rem var(--serif); color: var(--accent); margin: 8px 0 0; }
 .wishrow { margin-top: 14px; }
 .wishrow .chips { margin-top: 4px; }
+
+/* Week swipe */
+@keyframes from-right { from { opacity: .3; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+@keyframes from-left { from { opacity: .3; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+#view.from-right { animation: from-right .22s ease-out; }
+#view.from-left { animation: from-left .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { #view.from-right, #view.from-left { animation: none; } }

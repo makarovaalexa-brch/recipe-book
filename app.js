@@ -1527,6 +1527,28 @@ document.addEventListener('click', e => {
     ACT[el.dataset.act](el, e);
   } else if (e.target.id === 'modal') closeModal();
 });
+// Swipe left/right on the Week tab to go to the next/previous week (the plan is stored per week).
+let swipe = null;
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  const busy = e.touches.length > 1 || route().name !== 'week' || !$('#modal').hidden || e.target.closest('input, textarea, select, .chips, .stepper');
+  swipe = busy ? null : { x: t.clientX, y: t.clientY, at: Date.now() };
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!swipe) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+  const ok = Math.abs(dx) > 70 && Math.abs(dy) < 50 && Date.now() - swipe.at < 700;
+  swipe = null;
+  if (!ok) return;
+  UI.week = addDays(UI.week, dx < 0 ? 7 : -7);
+  render();
+  const v = $('#view');
+  v.classList.remove('from-left', 'from-right');
+  void v.offsetWidth; // restart the animation
+  v.classList.add(dx < 0 ? 'from-right' : 'from-left');
+}, { passive: true });
+
 IN.clSearch = el => { cl.q = el.value; $('#clList').innerHTML = classicsCards(); };
 document.addEventListener('input', e => { const el = e.target; if (el.dataset.in && IN[el.dataset.in]) IN[el.dataset.in](el); });
 document.addEventListener('change', e => { const el = e.target; if (el.dataset.ch && CH[el.dataset.ch]) CH[el.dataset.ch](el); });
