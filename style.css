@@ -100,8 +100,8 @@ button, .btn {
 button:hover, .btn:hover { background: var(--soft); }
 button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button.primary:hover, .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
-button.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 10px; min-height: 36px; }
-button.small { padding: 6px 12px; min-height: 34px; font-size: .7rem; }
+button.ghost, .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 10px; min-height: 36px; }
+button.small, .btn.small { padding: 6px 12px; min-height: 34px; font-size: .7rem; }
 button:disabled { opacity: .45; }
 button:focus-visible, .btn:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
