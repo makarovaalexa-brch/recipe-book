@@ -96,6 +96,17 @@ async function run(action, payload) {
   try { return await api(action, payload); } catch (e) { toast(e.message, true); }
 }
 
+/** Shopping-list writes in flight. A server copy fetched meanwhile is stale and would bring back what was just ticked. */
+const LIST = { busy: 0, gen: 0 };
+async function listCall(action, payload) {
+  LIST.busy++;
+  const gen = ++LIST.gen;
+  try {
+    const res = await run(action, payload);
+    return { res, fresh: LIST.busy === 1 && gen === LIST.gen };
+  } finally { LIST.busy--; }
+}
+
 /** New ingredients get nutrition, price and swap data from Gemini in the background. */
 async function enrichNewItems() {
   if (!cfg().api || !D.items.some(i => !i.group)) return;
@@ -506,23 +517,32 @@ function groceryRows(week) {
   return rows;
 }
 
-async function buildList() {
+/** True when the shopping list was made from this week's plan, so making it again should update it. */
+function listIsFor(week) {
+  return S().list_week === week && D.list.some(l => l.source === 'recipe' || l.source === 'basic');
+}
+
+/** mode 'update' keeps ticks and "got it" on rows still needed; 'fresh' starts over. Default: update if the list is for this week. */
+async function buildList(mode) {
+  mode = mode || (listIsFor(UI.week) ? 'update' : 'fresh');
   const entries = weekEntries(UI.week).filter(e => recipe(e.recipe_id)).map(e => ({ r: recipe(e.recipe_id), portions: num(e.portions, defPortions()) }));
   // Store-cupboard staples are asked about ("check you have") rather than assumed.
   const rows = aggregate(entries).map(r => Object.assign(r, { source: 'recipe', status: r.staple ? 'check' : '' }));
   rows.forEach(r => { delete r.staple; });
-  const onList = new Set(D.list.filter(l => !yes(l.checked) && l.source === 'manual').map(l => l.item_id));
+  const onList = new Set(D.list.filter(l => l.source === 'manual' && (mode === 'update' || !yes(l.checked))).map(l => l.item_id));
   groceryRows(UI.week).forEach(g => {
     if (onList.has(g.item_id)) return;
     const r = rows.find(x => x.item_id === g.item_id);
     if (!r) rows.push(g);
     else if (g.qty) Object.assign(r, { qty: [r.qty, g.qty].filter(Boolean).join(' + '), status: g.status });
   });
-  const list = await run('listBuild', { rows });
+  const { res: list } = await listCall('listBuild', { rows, mode, week: UI.week });
   if (!list) return;
   D.list = list;
+  D.settings.list_week = UI.week;
   saveCache();
-  toast('Shopping list ready – ' + list.filter(l => !yes(l.checked)).length + ' items');
+  const left = list.filter(l => !yes(l.checked)).length;
+  toast(mode === 'update' ? 'List updated – your ticks are kept (' + left + ' to get)' : 'Shopping list ready – ' + left + ' items');
   location.hash = '#/list';
 }
 
@@ -562,8 +582,10 @@ VIEWS.week = () => {
     <div class="row" style="margin-top:12px"><button data-act="openPicker" data-kind="other">＋ Add a meal</button></div>
     ${groceriesSection(entries)}
     <hr>
-    <button class="primary" style="width:100%" data-act="buildList" ${entries.length || D.items.some(i => yes(i.weekly)) ? '' : 'disabled'}>🛒 Make shopping list</button>
-    <p class="muted small" style="text-align:center">Adds up every ingredient plus the groceries. Store-cupboard things are asked about, and you can tick off anything you already have.</p>`;
+    <button class="primary" style="width:100%" data-act="buildList" ${entries.length || D.items.some(i => yes(i.weekly)) ? '' : 'disabled'}>🛒 ${listIsFor(UI.week) ? 'Update shopping list' : 'Make shopping list'}</button>
+    <p class="muted small" style="text-align:center">${listIsFor(UI.week)
+      ? 'Adds anything new from this week – what you’ve ticked or marked “got it” stays as it is.'
+      : 'Adds up every ingredient plus the groceries. Store-cupboard things are asked about, and you can tick off anything you already have.'}</p>`;
 };
 
 /** Things to buy that are not part of a recipe: weekly basics plus anything else this week. */
@@ -703,7 +725,9 @@ VIEWS.list = () => {
       <button data-act="openBasics">📋 Weekly basics</button>
       <button data-act="emailList" ${need.length ? '' : 'disabled'}>✉️ Email list</button>
       <a class="btn" href="#/items">Items</a>
-    </div>`;
+    </div>
+    ${S().list_week ? `<p class="muted small" style="text-align:center;margin-top:16px">List for the week of ${esc(S().list_week)} ·
+      <button class="ghost small" data-act="freshList">Start a fresh list</button></p>` : ''}`;
 };
 
 /** Swap hint under a list row, for deciding in the shop when the item isn't there. */
@@ -1139,6 +1163,10 @@ const ACT = {
   pick: el => pickDone(recipe(el.dataset.id), ''),
   pickFree: el => pickDone(null, el.dataset.t),
   buildList: () => buildList(),
+  freshList: () => openModal(`<h2 style="margin-top:0">Start a fresh list?</h2>
+    <p>This rebuilds the list from the week of ${esc(S().list_week)} and clears all ticks, “got it” marks and the trolley. Things you added by hand stay.</p>
+    <div class="row end"><button class="ghost" data-act="closeModal">Cancel</button><button class="primary" data-act="freshListGo">Start fresh</button></div>`),
+  freshListGo: () => { closeModal(); UI.week = S().list_week; buildList('fresh'); },
   openClassics: el => openClassics(el.dataset.kind),
   clKind: el => { cl.kind = el.dataset.k; cl.cuisine = ''; cl.all = false; cl.q = ''; renderClassics(); },
   clCuisine: el => { cl.cuisine = el.dataset.k; cl.all = false; cl.q = ''; renderClassics(); },
@@ -1203,14 +1231,14 @@ const ACT = {
     l.checked = !yes(l.checked);
     saveCache();
     render();
-    await run('listUpdate', { id: l.id, fields: { checked: l.checked } });
+    await listCall('listUpdate', { id: l.id, fields: { checked: l.checked } });
   },
   toggleTrolley: () => { UI.showTrolley = !UI.showTrolley; render(); },
   clearChecked: async () => {
     D.list = D.list.filter(l => !yes(l.checked));
     render();
-    const list = await run('listClearChecked');
-    if (list) { D.list = list; saveCache(); render(); }
+    const { res: list, fresh } = await listCall('listClearChecked');
+    if (list && fresh) { D.list = list; saveCache(); render(); }
   },
   addSugg: el => addToList({ item_id: el.dataset.id, qty: el.dataset.qty }),
   addNew: el => {
@@ -1247,7 +1275,7 @@ const ACT = {
     Object.assign(l, fields);
     closeModal();
     render();
-    await run('listUpdate', { id: l.id, fields });
+    await listCall('listUpdate', { id: l.id, fields });
     const it = D.items.find(i => i.id === l.item_id);
     if (aisleChanged && it) { it.aisle = fields.aisle; const items = await run('itemSave', { item: { id: it.id, aisle: it.aisle } }); if (items) D.items = items; }
     saveCache();
@@ -1256,7 +1284,7 @@ const ACT = {
     D.list = D.list.filter(l => l.id !== el.dataset.id);
     closeModal();
     render();
-    await run('listRemove', { ids: [el.dataset.id] });
+    await listCall('listRemove', { ids: [el.dataset.id] });
     saveCache();
   },
   openBasics: () => openBasics(),
@@ -1456,7 +1484,7 @@ async function addToList(row) {
   if (q) q.value = '';
   const sugg = $('#lsugg');
   if (sugg) sugg.innerHTML = '';
-  const res = await run('listAdd', payload);
+  const { res } = await listCall('listAdd', payload);
   if (!res) return;
   D.list = D.list.concat(res.rows);
   D.items = res.items;
@@ -1480,8 +1508,8 @@ async function setStatus(ids, status) {
   D.list.forEach(l => { if (ids.indexOf(l.id) >= 0) l.status = status; });
   saveCache();
   render();
-  const list = await run('listStatus', { ids, status });
-  if (list) { D.list = list; saveCache(); render(); }
+  const { res: list, fresh } = await listCall('listStatus', { ids, status });
+  if (list && fresh) { D.list = list; saveCache(); render(); }
 }
 
 /** Full-screen "working on it" layer for slow imports: stage messages and a seconds counter. Returns stop(). */
@@ -1651,7 +1679,11 @@ setInterval(async () => {
   if (!D || !cfg().api || document.hidden || route().name !== 'list' || !$('#modal').hidden) return;
   if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
   try {
+    if (LIST.busy) return;
+    const gen = LIST.gen;
     const list = await api('listGet');
+    // A tap made while this was loading is newer than the server copy – don't undo it.
+    if (LIST.busy || gen !== LIST.gen) return;
     if (JSON.stringify(list) !== JSON.stringify(D.list)) { D.list = list; saveCache(); render(); }
   } catch (e) { /* offline – try again next tick */ }
 }, 12000);
