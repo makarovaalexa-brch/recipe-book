@@ -618,7 +618,9 @@ function restockSection(extra) {
   const added = new Map(extra.map(e => [e.item_id, e]));
   const groups = {};
   items.forEach(i => { (groups[i.aisle || 'Other'] = groups[i.aisle || 'Other'] || []).push(i); });
-  const aisles = Object.keys(groups).sort((a, b) => (a === 'Household' ? -1 : b === 'Household' ? 1 : aisleIdx(a) - aisleIdx(b)));
+  // Non-food sections first – that's what this list is mostly for.
+  const food = a => (['Cleaning & toiletries', 'Baby', 'Dog', 'Household'].indexOf(a) < 0 ? 1 : 0);
+  const aisles = Object.keys(groups).sort((a, b) => food(a) - food(b) || aisleIdx(a) - aisleIdx(b));
   const n = items.filter(i => added.has(i.id)).length;
   return `<div class="basics">
       <button class="basics-head" data-act="toggleRestock" aria-expanded="${UI.restockOpen}">
