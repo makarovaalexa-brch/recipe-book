@@ -26,6 +26,7 @@ const UI = {
   showTrolley: false, showHome: false,
   basicsOpen: store.get('basicsOpen', false),
   restockOpen: store.get('restockOpen', false),
+  listMode: store.get('listMode', 'edit'), // 'shop': tick only, nothing can be hidden or changed by accident
   wake: null,
 };
 
@@ -543,6 +544,8 @@ async function buildList(mode) {
   saveCache();
   const left = list.filter(l => !yes(l.checked)).length;
   toast(mode === 'update' ? 'List updated – your ticks are kept (' + left + ' to get)' : 'Shopping list ready – ' + left + ' items');
+  UI.listMode = 'edit';
+  store.set('listMode', 'edit');
   location.hash = '#/list';
 }
 
@@ -696,11 +699,24 @@ VIEWS.list = () => {
   const home = open.filter(l => l.status === 'home');
   const need = open.filter(l => !l.status);
   const done = D.list.filter(l => yes(l.checked));
+  const shop = UI.listMode === 'shop';
   const groups = {};
   // Ticked rows stay where they are, crossed out, so the list doesn't jump about in the shop.
-  need.concat(done).forEach(l => { (groups[l.aisle || 'Other'] = groups[l.aisle || 'Other'] || []).push(l); });
+  // Shopping mode also lists cupboard things nobody has checked yet, so nothing gets forgotten.
+  need.concat(done, shop ? ask : []).forEach(l => { (groups[l.aisle || 'Other'] = groups[l.aisle || 'Other'] || []).push(l); });
   const aisles = Object.keys(groups).sort((a, b) => aisleIdx(a) - aisleIdx(b));
-  return demoBanner() + `
+  const modes = `<div class="modes" role="group" aria-label="List mode">
+      <button class="${shop ? 'on' : ''}" data-act="listMode" data-m="shop" aria-pressed="${shop}">🛒 Shopping</button>
+      <button class="${shop ? '' : 'on'}" data-act="listMode" data-m="edit" aria-pressed="${!shop}">✏️ Editing</button>
+    </div>`;
+  const rows = a => groups[a].sort((x, y) => x.name.localeCompare(y.name)).map(l => listRow(l, shop)).join('');
+  if (shop) {
+    return demoBanner() + modes + `
+    <p class="muted small" style="text-align:center;margin:6px 0 0">Tap to cross off. Switch to Editing to change anything.</p>
+    ${aisles.map(a => `<div class="aisle"><h3>${esc(a)}</h3>${rows(a)}</div>`).join('') || '<div class="empty">Nothing on the list.</div>'}
+    ${done.length ? `<p class="muted small" style="text-align:center;margin-top:14px">✓ ${done.length} of ${done.length + need.length + ask.length} in the trolley</p>` : ''}`;
+  }
+  return demoBanner() + modes + `
     <div class="search" id="lsearch">
       <input id="lq" data-in="listSearch" placeholder="Add item… e.g. “2 milk”" autocomplete="off" enterkeyhint="done">
       <div id="lsugg"></div>
@@ -713,7 +729,7 @@ VIEWS.list = () => {
       <div class="row end" style="margin-top:6px"><button class="ghost small" data-act="allHome">Got all of these</button></div>
     </div>` : ''}
     ${need.length && !done.length ? '<p class="muted small" style="margin-bottom:0">Before you go: tap 🏠 on anything you already have at home.</p>' : ''}
-    ${aisles.map(a => `<div class="aisle"><h3>${esc(a)}</h3>${groups[a].sort((x, y) => x.name.localeCompare(y.name)).map(listRow).join('')}</div>`).join('') ||
+    ${aisles.map(a => `<div class="aisle"><h3>${esc(a)}</h3>${rows(a)}</div>`).join('') ||
       (ask.length ? '' : '<div class="empty">The list is empty.<br>Plan the week and tap “Make shopping list”, or add items above.</div>')}
     ${home.length ? `<div class="aisle"><div class="row"><h3 class="grow" style="margin:0">🏠 Already at home (${home.length})</h3>
       <button class="ghost small" data-act="toggleHome">${UI.showHome ? 'hide' : 'show'}</button></div>
@@ -737,13 +753,14 @@ function listSwap(l) {
   return it && it.swap && !yes(l.checked) ? `<span class="swapnote">If not in stock: ${esc(it.swap)}</span>` : '';
 }
 
-function listRow(l) {
-  return `<div class="li ${yes(l.checked) ? 'checked' : ''}">
+function listRow(l, shop) {
+  const note = [l.status === 'check' ? 'check the cupboard first' : '', l.note].filter(Boolean).join(' · ');
+  return `<div class="li ${yes(l.checked) ? 'checked' : ''}" ${shop ? `data-act="tick" data-id="${l.id}"` : ''}>
     <input type="checkbox" data-act="tick" data-id="${l.id}" ${yes(l.checked) ? 'checked' : ''} aria-label="Got it">
-    <div class="name" data-act="tick" data-id="${l.id}">${esc(l.name)}${l.note ? `<span class="note">${esc(l.note)}</span>` : ''}${listSwap(l)}</div>
+    <div class="name" data-act="tick" data-id="${l.id}">${esc(l.name)}${note ? `<span class="note">${esc(note)}</span>` : ''}${listSwap(l)}</div>
     <span class="qty">${esc([l.qty, l.unit].filter(Boolean).join(' '))}</span>
-    ${yes(l.checked) ? '' : `<button class="ghost small" data-act="setStatus" data-id="${l.id}" data-s="home" aria-label="Already have it" title="Already have it">🏠</button>`}
-    <button class="ghost small" data-act="editRow" data-id="${l.id}" aria-label="Edit">⋯</button>
+    ${shop ? '' : yes(l.checked) ? '' : `<button class="ghost small" data-act="setStatus" data-id="${l.id}" data-s="home" aria-label="Already have it" title="Already have it">🏠</button>`}
+    ${shop ? '' : `<button class="ghost small" data-act="editRow" data-id="${l.id}" aria-label="Edit">⋯</button>`}
   </div>`;
 }
 
@@ -1164,6 +1181,7 @@ const ACT = {
   pick: el => pickDone(recipe(el.dataset.id), ''),
   pickFree: el => pickDone(null, el.dataset.t),
   buildList: () => buildList(),
+  listMode: el => { UI.listMode = el.dataset.m; store.set('listMode', UI.listMode); render(); window.scrollTo(0, 0); },
   freshList: () => openModal(`<h2 style="margin-top:0">Start a fresh list?</h2>
     <p>This rebuilds the list from the week of ${esc(S().list_week)} and clears all ticks, “got it” marks and the trolley. Things you added by hand stay.</p>
     <div class="row end"><button class="ghost" data-act="closeModal">Cancel</button><button class="primary" data-act="freshListGo">Start fresh</button></div>`),
