@@ -697,7 +697,8 @@ VIEWS.list = () => {
   const need = open.filter(l => !l.status);
   const done = D.list.filter(l => yes(l.checked));
   const groups = {};
-  need.forEach(l => { (groups[l.aisle || 'Other'] = groups[l.aisle || 'Other'] || []).push(l); });
+  // Ticked rows stay where they are, crossed out, so the list doesn't jump about in the shop.
+  need.concat(done).forEach(l => { (groups[l.aisle || 'Other'] = groups[l.aisle || 'Other'] || []).push(l); });
   const aisles = Object.keys(groups).sort((a, b) => aisleIdx(a) - aisleIdx(b));
   return demoBanner() + `
     <div class="search" id="lsearch">
@@ -718,10 +719,8 @@ VIEWS.list = () => {
       <button class="ghost small" data-act="toggleHome">${UI.showHome ? 'hide' : 'show'}</button></div>
       ${UI.showHome ? home.map(l => `<div class="li"><span class="name">${esc(l.name)}<span class="note">${esc(l.qty)}</span></span>
         <button class="ghost small" data-act="setStatus" data-id="${l.id}" data-s="">need it after all</button></div>`).join('') : ''}</div>` : ''}
-    ${done.length ? `<div class="aisle"><div class="row"><h3 class="grow" style="margin:0">In the trolley (${done.length})</h3>
-      <button class="ghost small" data-act="toggleTrolley">${UI.showTrolley ? 'hide' : 'show'}</button>
-      <button class="ghost small" data-act="clearChecked">clear</button></div>
-      ${UI.showTrolley ? done.map(listRow).join('') : ''}</div>` : ''}
+    ${done.length ? `<div class="row" style="margin-top:12px"><span class="grow muted small">✓ ${done.length} in the trolley</span>
+      <button class="ghost small" data-act="clearChecked">Clear ticked items</button></div>` : ''}
     <hr>
     <div class="row">
       <button data-act="openBasics">📋 Weekly basics</button>
@@ -1235,7 +1234,6 @@ const ACT = {
     render();
     await listCall('listUpdate', { id: l.id, fields: { checked: l.checked } });
   },
-  toggleTrolley: () => { UI.showTrolley = !UI.showTrolley; render(); },
   clearChecked: async () => {
     D.list = D.list.filter(l => !yes(l.checked));
     render();

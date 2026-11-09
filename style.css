@@ -189,7 +189,8 @@ label.field > input, label.field > select, label.field > textarea { margin-top: 
 .li .name { flex: 1; min-width: 0; }
 .li .qty { color: var(--muted); font-size: .9rem; white-space: nowrap; }
 .li .note { display: block; color: var(--muted); font-size: .8rem; }
-.li.checked .name { text-decoration: line-through; color: var(--muted); }
+.li.checked .name, .li.checked .qty { text-decoration: line-through; color: var(--muted); }
+.li.checked .name .note { text-decoration: line-through; }
 .sugg { position: absolute; z-index: 4; left: 0; right: 0; top: 48px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(60, 40, 35, .08); max-height: 50vh; overflow: auto; }
 .sugg button { display: flex; width: 100%; justify-content: space-between; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; text-align: left; text-transform: none; letter-spacing: 0; font-size: .95rem; font-weight: 400; }
 .pantry { border-left: 2px solid var(--star); }
