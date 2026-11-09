@@ -1,6 +1,6 @@
 // Caches the app shell so recipes open even with poor kitchen wifi.
 // Data is cached separately by app.js in localStorage.
-const CACHE = 'recipe-book-v40';
+const CACHE = 'recipe-book-v41';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'mock.js', 'classics.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png'];
 
 self.addEventListener('install', e => {
@@ -18,7 +18,15 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // Network first (so updates arrive), cache as fallback. no-cache = always ask GitHub if the file changed,
   // instead of trusting the browser's 10-minute copy.
-  e.respondWith(fetch(e.request, { cache: 'no-cache' })
-    .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })
-    .catch(() => caches.match(e.request, { ignoreSearch: true })));
+  // On weak signal (in the shop) don't wait more than 3 s – use the saved copy if there is one.
+  const net = fetch(e.request, { cache: 'no-cache' })
+    .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; });
+  const saved = caches.match(e.request, { ignoreSearch: true });
+  e.respondWith(new Promise(resolve => {
+    let done = false;
+    const give = r => { if (!done && r) { done = true; resolve(r); } };
+    const timer = setTimeout(() => saved.then(give), 3000);
+    net.then(r => { clearTimeout(timer); give(r); })
+      .catch(() => saved.then(r => give(r || Response.error())));
+  }));
 });

@@ -108,6 +108,28 @@ async function listCall(action, payload) {
   } finally { LIST.busy--; }
 }
 
+/* Crossing off works offline: ticks are saved on the phone first and sent to the sheet quietly when
+   there's signal. Until then they are laid over any copy of the list that comes from the server. */
+const TICKS = store.get('tickQueue', {});
+function withTicks(list) {
+  (list || []).forEach(l => { if (l.id in TICKS) l.checked = TICKS[l.id]; });
+  return list;
+}
+async function flushTicks() {
+  if (flushTicks.on || !cfg().api || !Object.keys(TICKS).length) return;
+  flushTicks.on = true;
+  LIST.busy++; LIST.gen++;
+  try {
+    for (const id of Object.keys(TICKS)) {
+      const checked = TICKS[id];
+      await api('listUpdate', { id, fields: { checked } });
+      if (TICKS[id] === checked) { delete TICKS[id]; store.set('tickQueue', TICKS); }
+    }
+  } catch (e) { /* no signal – try again later */ }
+  finally { LIST.busy--; flushTicks.on = false; }
+}
+window.addEventListener('online', flushTicks);
+
 /** New ingredients get nutrition, price and swap data from Gemini in the background. */
 async function enrichNewItems() {
   if (!cfg().api || !D.items.some(i => !i.group)) return;
@@ -120,7 +142,9 @@ async function enrichNewItems() {
 async function load() {
   try {
     D = await api('bootstrap');
+    withTicks(D.list);
     saveCache();
+    flushTicks();
   } catch (e) {
     if (!D) { $('#view').innerHTML = '<div class="empty">Could not load: ' + esc(e.message) + '<br><br><a href="#/settings">Check settings</a></div>'; return; }
     toast('Offline – showing saved copy', true);
@@ -539,7 +563,7 @@ async function buildList(mode) {
   });
   const { res: list } = await listCall('listBuild', { rows, mode, week: UI.week });
   if (!list) return;
-  D.list = list;
+  D.list = withTicks(list);
   D.settings.list_week = UI.week;
   saveCache();
   const left = list.filter(l => !yes(l.checked)).length;
@@ -714,7 +738,10 @@ VIEWS.list = () => {
     return demoBanner() + modes + `
     <p class="muted small" style="text-align:center;margin:6px 0 0">Tap to cross off. Switch to Editing to change anything.</p>
     ${aisles.map(a => `<div class="aisle"><h3>${esc(a)}</h3>${rows(a)}</div>`).join('') || '<div class="empty">Nothing on the list.</div>'}
-    ${done.length ? `<p class="muted small" style="text-align:center;margin-top:14px">✓ ${done.length} of ${done.length + need.length + ask.length} in the trolley</p>` : ''}`;
+    ${done.length ? `<p class="muted small" style="text-align:center;margin-top:14px">✓ ${done.length} of ${done.length + need.length + ask.length} in the trolley</p>` : ''}
+    ${done.length && need.length + ask.length ? `<div class="row" style="justify-content:center;margin-top:8px">
+      <button data-act="emailList" data-missing="1">📧 Email what's left</button></div>
+      <p class="muted small" style="text-align:center;margin-top:4px">Not in stock? Emails everything not crossed off, to get elsewhere.</p>` : ''}`;
   }
   return demoBanner() + modes + `
     <div class="search" id="lsearch">
@@ -1245,18 +1272,21 @@ const ACT = {
   },
 
   // shopping list
-  tick: async el => {
+  tick: el => {
     const l = D.list.find(x => x.id === el.dataset.id);
     l.checked = !yes(l.checked);
+    TICKS[l.id] = l.checked;
+    store.set('tickQueue', TICKS);
     saveCache();
     render();
-    await listCall('listUpdate', { id: l.id, fields: { checked: l.checked } });
+    flushTicks();
   },
   clearChecked: async () => {
+    await flushTicks();
     D.list = D.list.filter(l => !yes(l.checked));
     render();
     const { res: list, fresh } = await listCall('listClearChecked');
-    if (list && fresh) { D.list = list; saveCache(); render(); }
+    if (list && fresh) { D.list = withTicks(list); saveCache(); render(); }
   },
   addSugg: el => addToList({ item_id: el.dataset.id, qty: el.dataset.qty }),
   addNew: el => {
@@ -1308,9 +1338,12 @@ const ACT = {
   openBasics: () => openBasics(),
   emailList: async el => {
     el.disabled = true;
-    const r = await run('emailList');
+    const missing = el.dataset.missing === '1';
+    if (missing) await flushTicks();
+    if (missing && Object.keys(TICKS).length) { el.disabled = false; toast('No signal – your ticks aren’t saved yet. Try again when you’re online.', true); return; }
+    const r = await run('emailList', { missing });
     el.disabled = false;
-    if (r) toast('Sent to ' + r.sent_to);
+    if (r) toast((missing ? r.count + ' still to buy – sent to ' : 'Sent to ') + r.sent_to);
   },
 
   // recipes
@@ -1527,7 +1560,7 @@ async function setStatus(ids, status) {
   saveCache();
   render();
   const { res: list, fresh } = await listCall('listStatus', { ids, status });
-  if (list && fresh) { D.list = list; saveCache(); render(); }
+  if (list && fresh) { D.list = withTicks(list); saveCache(); render(); }
 }
 
 /** Full-screen "working on it" layer for slow imports: stage messages and a seconds counter. Returns stop(). */
@@ -1697,9 +1730,10 @@ setInterval(async () => {
   if (!D || !cfg().api || document.hidden || route().name !== 'list' || !$('#modal').hidden) return;
   if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
   try {
+    await flushTicks();
     if (LIST.busy) return;
     const gen = LIST.gen;
-    const list = await api('listGet');
+    const list = withTicks(await api('listGet'));
     // A tap made while this was loading is newer than the server copy – don't undo it.
     if (LIST.busy || gen !== LIST.gen) return;
     if (JSON.stringify(list) !== JSON.stringify(D.list)) { D.list = list; saveCache(); render(); }
